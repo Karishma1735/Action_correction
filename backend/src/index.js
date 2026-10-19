@@ -9,4 +9,4 @@ const app = createApp(db, escalation);
 
 setInterval(() => escalation.tick().catch((err) => console.error('scheduler tick failed:', err)), config.tickSeconds * 1000);
 
-app.listen(config.port, () => console.log(`API on :${config.port} (notifier: ${config.notifier})`));
+app.listen(config.port, '0.0.0.0', () => console.log(`API on :${config.port} (notifier: ${config.notifier})`));
