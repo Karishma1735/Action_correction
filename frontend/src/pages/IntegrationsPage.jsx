@@ -49,16 +49,18 @@ export default function IntegrationsPage() {
 
   return (
     <>
-      <h2>Integrations</h2>
-      <p>Connect Slack and email here. Reminders and escalations are delivered through the accounts you connect.</p>
-      {error && <p className="error">{error}</p>}
+      <div className="page-head">
+        <h2>Integrations</h2>
+        <p>Connect Slack and email. Reminders and escalations are delivered through the accounts you connect.</p>
+      </div>
       {status && (
-        <p>
-          Delivery mode: <strong>{status.notifier}</strong> · viaSocket secret configured:{' '}
-          <strong>{status.viasocketConfigured ? 'yes' : 'no'}</strong>
-        </p>
+        <div className="chips" style={{ marginBottom: 16 }}>
+          <span className={`badge ${status.notifier === 'viasocket' ? 'ok' : 'warn'}`}>Delivery: {status.notifier === 'viasocket' ? 'viaSocket' : 'console log only'}</span>
+          <span className={`badge ${status.viasocketConfigured ? 'ok' : 'bad'}`}>viaSocket secret {status.viasocketConfigured ? 'configured' : 'missing'}</span>
+        </div>
       )}
-      <div ref={box} className="panel" style={{ height: 640 }} />
+      {error && <p className="error">{error}</p>}
+      <div ref={box} className="card embed-box" style={{ height: 640 }} />
     </>
   );
 }

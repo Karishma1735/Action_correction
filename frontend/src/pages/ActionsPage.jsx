@@ -1,12 +1,48 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 
+const STATUS = { open: ['Open', 'info'], in_progress: ['In progress', 'warn'], done: ['Done', 'ok'] };
+const REVIEW = { pending: ['Pending', ''], rejected: ['Rejected', 'bad'], improve: ['Needs improvement', 'warn'] };
+const PRIORITY = { high: 'bad', medium: 'warn', low: 'ok' };
+const label = (map, key) => map[key] || [key, ''];
+const EMPTY = { title: '', description: '', team_id: '', assignee_id: '' };
+
+function Badge({ tone = '', children }) {
+  return <span className={`badge ${tone}`}>{children}</span>;
+}
+
+function ReviewDialog({ action, decision, onCancel, onSubmit }) {
+  const [feedback, setFeedback] = useState('');
+  const rejected = decision === 'rejected';
+  return (
+    <div className="overlay center" onClick={onCancel}>
+      <form
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={(e) => { e.preventDefault(); onSubmit(feedback.trim()); }}
+      >
+        <h3>{rejected ? 'Reject action' : 'Request improvement'}</h3>
+        <p className="muted">“{action.title}”. The assignee and team lead will be notified.</p>
+        <div className="field">
+          <label htmlFor="feedback">{rejected ? 'Why is it rejected?' : 'What needs to be improved?'}</label>
+          <textarea id="feedback" value={feedback} onChange={(e) => setFeedback(e.target.value)} autoFocus required />
+        </div>
+        <div className="btn-row">
+          <button type="button" className="btn" onClick={onCancel}>Cancel</button>
+          <button className="btn primary" disabled={!feedback.trim()}>{rejected ? 'Reject' : 'Send for improvement'}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 export default function ActionsPage() {
   const [actions, setActions] = useState([]);
   const [teams, setTeams] = useState([]);
   const [people, setPeople] = useState([]);
-  const [form, setForm] = useState({ title: '', description: '', team_id: '', assignee_id: '' });
+  const [form, setForm] = useState(EMPTY);
   const [open, setOpen] = useState(null);
+  const [dialog, setDialog] = useState(null);
   const [error, setError] = useState('');
 
   const load = () =>
@@ -28,65 +64,132 @@ export default function ActionsPage() {
     e.preventDefault();
     run(async () => {
       await api.addAction({ ...form, team_id: Number(form.team_id), assignee_id: Number(form.assignee_id) });
-      setForm({ title: '', description: '', team_id: '', assignee_id: '' });
+      setForm(EMPTY);
     });
   };
 
-  const review = (action, decision) => {
-    const feedback = window.prompt(decision === 'rejected' ? 'Why is it rejected?' : 'What needs to be improved?');
-    if (feedback) run(() => api.review(action.id, { decision, feedback }));
-  };
+  const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
+  const needsSetup = teams.length === 0 || people.length === 0;
 
   return (
     <>
-      <h2>New action</h2>
-      <form onSubmit={create} className="row">
-        <input required placeholder="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-        <input placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-        <select required value={form.team_id} onChange={(e) => setForm({ ...form, team_id: e.target.value })}>
-          <option value="">Team</option>
-          {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-        <select required value={form.assignee_id} onChange={(e) => setForm({ ...form, assignee_id: e.target.value })}>
-          <option value="">Assignee</option>
-          {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-        <button>Create</button>
-      </form>
+      <div className="page-head">
+        <h2>Actions</h2>
+        <p>Rejected or “improve” actions notify the assignee and lead, remind after 2 hours and escalate to the manager after 24.</p>
+      </div>
       {error && <p className="error">{error}</p>}
 
-      <h2>Actions</h2>
-      <table>
-        <thead><tr><th>Title</th><th>Team</th><th>Assignee</th><th>Review</th><th>Status</th><th>Priority</th><th /></tr></thead>
-        <tbody>
-          {actions.map((a) => (
-            <tr key={a.id}>
-              <td><a href="#" onClick={(e) => { e.preventDefault(); api.action(a.id).then(setOpen); }}>{a.title}</a></td>
-              <td>{a.team_name}</td>
-              <td>{a.assignee_name}</td>
-              <td>{a.review}</td>
-              <td>{a.status}</td>
-              <td>{a.priority || '-'}</td>
-              <td className="buttons">
-                <button onClick={() => review(a, 'rejected')}>Reject</button>
-                <button onClick={() => review(a, 'improve')}>Improve</button>
-                <button disabled={a.status === 'done'} onClick={() => run(() => api.setStatus(a.id, 'done'))}>Done</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <section className="card">
+        <div className="card-head"><h3>New action</h3></div>
+        {needsSetup && <p className="muted">Add at least one person and one team under “People &amp; teams” first.</p>}
+        <form onSubmit={create} className="grid">
+          <div className="field">
+            <label htmlFor="title">Title</label>
+            <input id="title" required placeholder="e.g. Update onboarding doc" value={form.title} onChange={set('title')} />
+          </div>
+          <div className="field">
+            <label htmlFor="description">Description</label>
+            <input id="description" placeholder="Optional" value={form.description} onChange={set('description')} />
+          </div>
+          <div className="field">
+            <label htmlFor="team">Team</label>
+            <select id="team" required value={form.team_id} onChange={set('team_id')}>
+              <option value="">Select team</option>
+              {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="assignee">Assignee</label>
+            <select id="assignee" required value={form.assignee_id} onChange={set('assignee_id')}>
+              <option value="">Select person</option>
+              {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <button className="btn primary" disabled={needsSetup}>Create action</button>
+        </form>
+      </section>
+
+      <section className="card">
+        <div className="card-head"><h3>All actions</h3><span className="muted">{actions.length} total</span></div>
+        {actions.length === 0 ? (
+          <div className="empty"><strong>No actions yet</strong>Create one above to get started.</div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Title</th><th>Team</th><th>Assignee</th><th>Review</th><th>Status</th><th>Priority</th><th /></tr></thead>
+              <tbody>
+                {actions.map((a) => {
+                  const [reviewText, reviewTone] = label(REVIEW, a.review);
+                  const [statusText, statusTone] = label(STATUS, a.status);
+                  return (
+                    <tr key={a.id}>
+                      <td><button className="link" onClick={() => api.action(a.id).then(setOpen)}>{a.title}</button></td>
+                      <td>{a.team_name}</td>
+                      <td>{a.assignee_name}</td>
+                      <td><Badge tone={reviewTone}>{reviewText}</Badge></td>
+                      <td><Badge tone={statusTone}>{statusText}</Badge></td>
+                      <td>{a.priority ? <Badge tone={PRIORITY[a.priority] || ''}>{a.priority}</Badge> : <span className="muted">–</span>}</td>
+                      <td>
+                        <div className="btn-row">
+                          <button className="btn sm danger" onClick={() => setDialog({ action: a, decision: 'rejected' })}>Reject</button>
+                          <button className="btn sm" onClick={() => setDialog({ action: a, decision: 'improve' })}>Improve</button>
+                          <button className="btn sm success" disabled={a.status === 'done'} onClick={() => run(() => api.setStatus(a.id, 'done'))}>Done</button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {dialog && (
+        <ReviewDialog
+          {...dialog}
+          onCancel={() => setDialog(null)}
+          onSubmit={(feedback) => {
+            const { action, decision } = dialog;
+            setDialog(null);
+            run(() => api.review(action.id, { decision, feedback }));
+          }}
+        />
+      )}
 
       {open && (
-        <section className="panel">
-          <button className="close" onClick={() => setOpen(null)}>Close</button>
-          <h3>{open.title}</h3>
-          {open.ai_summary && <p><strong>Summary ({open.ai_source}):</strong> {open.ai_summary}</p>}
-          <h4>Scheduled follow-ups</h4>
-          <ul>{open.jobs.map((j) => <li key={j.id}>{j.type} at {j.run_at} UTC · {j.state}</li>)}</ul>
-          <h4>History</h4>
-          <ul>{open.events.map((ev) => <li key={ev.id}>{ev.created_at} · {ev.kind} {ev.detail && `· ${ev.detail}`}</li>)}</ul>
-        </section>
+        <div className="overlay" onClick={() => setOpen(null)}>
+          <aside className="drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="card-head">
+              <h3>{open.title}</h3>
+              <button className="btn sm" onClick={() => setOpen(null)}>Close</button>
+            </div>
+            <div className="chips">
+              <Badge tone={label(STATUS, open.status)[1]}>{label(STATUS, open.status)[0]}</Badge>
+              <Badge tone={label(REVIEW, open.review)[1]}>{label(REVIEW, open.review)[0]}</Badge>
+              {open.priority && <Badge tone={PRIORITY[open.priority] || ''}>{open.priority} priority</Badge>}
+            </div>
+            {open.description && <p className="muted">{open.description}</p>}
+            {open.feedback && <p><strong>Feedback:</strong> {open.feedback}</p>}
+            {open.ai_summary && <div className="summary"><strong>AI summary ({open.ai_source}):</strong> {open.ai_summary}</div>}
+
+            <h4 className="section-title">Scheduled follow-ups</h4>
+            {open.jobs.length === 0 ? <p className="muted">None.</p> : (
+              <ul className="timeline">
+                {open.jobs.map((j) => (
+                  <li key={j.id}><time>{j.run_at} UTC</time>{j.type} · <Badge tone={j.state === 'pending' ? 'info' : j.state === 'cancelled' ? '' : 'ok'}>{j.state}</Badge></li>
+                ))}
+              </ul>
+            )}
+
+            <h4 className="section-title">History</h4>
+            {open.events.length === 0 ? <p className="muted">Nothing yet.</p> : (
+              <ul className="timeline">
+                {open.events.map((ev) => <li key={ev.id}><time>{ev.created_at} UTC</time>{ev.kind}{ev.detail && ` · ${ev.detail}`}</li>)}
+              </ul>
+            )}
+          </aside>
+        </div>
       )}
     </>
   );
