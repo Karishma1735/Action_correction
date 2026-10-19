@@ -11,6 +11,43 @@ function Badge({ tone = '', children }) {
   return <span className={`badge ${tone}`}>{children}</span>;
 }
 
+function ManageAction({ action, teams, people, onSave, onDelete }) {
+  const [team_id, setTeam] = useState(String(action.team_id));
+  const [assignee_id, setAssignee] = useState(String(action.assignee_id));
+  const [confirming, setConfirming] = useState(false);
+  const changed = team_id !== String(action.team_id) || assignee_id !== String(action.assignee_id);
+  return (
+    <>
+      <h4 className="section-title">Manage</h4>
+      <div className="grid">
+        <div className="field">
+          <label htmlFor="mteam">Team</label>
+          <select id="mteam" value={team_id} onChange={(e) => setTeam(e.target.value)}>
+            {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="massignee">Assignee</label>
+          <select id="massignee" value={assignee_id} onChange={(e) => setAssignee(e.target.value)}>
+            {people.map((p) => <option key={p.id} value={p.id}>{p.name}{p.email ? ` (${p.email})` : ''}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="btn-row" style={{ justifyContent: 'space-between', marginTop: 14 }}>
+        {confirming ? (
+          <span className="btn-row">
+            <button className="btn sm" onClick={() => setConfirming(false)}>Keep</button>
+            <button className="btn sm danger" onClick={onDelete}>Yes, delete this action</button>
+          </span>
+        ) : (
+          <button className="btn sm danger" onClick={() => setConfirming(true)}>Delete action</button>
+        )}
+        <button className="btn sm primary" disabled={!changed} onClick={() => onSave({ team_id: Number(team_id), assignee_id: Number(assignee_id) })}>Save changes</button>
+      </div>
+    </>
+  );
+}
+
 function ReviewDialog({ action, decision, onCancel, onSubmit }) {
   const [feedback, setFeedback] = useState('');
   const rejected = decision === 'rejected';
@@ -170,6 +207,18 @@ export default function ActionsPage() {
               {open.priority && <Badge tone={PRIORITY[open.priority] || ''}>{open.priority} priority</Badge>}
             </div>
             {open.description && <p className="muted">{open.description}</p>}
+            <ManageAction
+              key={`${open.id}-${open.team_id}-${open.assignee_id}`}
+              action={open}
+              teams={teams}
+              people={people}
+              onSave={(change) => run(() => api.updateAction(open.id, { title: open.title, description: open.description, ...change }))}
+              onDelete={async () => {
+                const id = open.id;
+                setOpen(null);
+                try { await api.deleteAction(id); await load(); } catch (err) { setError(err.message); }
+              }}
+            />
             {open.feedback && <p><strong>Feedback:</strong> {open.feedback}</p>}
             {open.ai_summary && <div className="summary"><strong>AI summary ({open.ai_source}):</strong> {open.ai_summary}</div>}
 

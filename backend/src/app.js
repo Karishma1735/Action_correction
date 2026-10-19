@@ -113,6 +113,30 @@ export function createApp(db, escalation) {
       res.status(400).json({ error: err.message });
     }
   });
+  app.put('/api/actions/:id', (req, res) => {
+    const { title, description, team_id, assignee_id } = req.body;
+    if (!title || !team_id || !assignee_id) return res.status(400).json({ error: 'title, team_id and assignee_id are required' });
+    if (!db.prepare('SELECT 1 FROM teams WHERE id = ?').get(team_id)) return res.status(400).json({ error: 'team not found' });
+    if (!db.prepare('SELECT 1 FROM people WHERE id = ?').get(assignee_id)) return res.status(400).json({ error: 'person not found' });
+    const before = db.prepare('SELECT * FROM actions WHERE id = ?').get(req.params.id);
+    if (!before) return res.status(404).json({ error: 'not found' });
+    db.prepare("UPDATE actions SET title = ?, description = ?, team_id = ?, assignee_id = ?, updated_at = datetime('now') WHERE id = ?").run(title, description ?? null, team_id, assignee_id, before.id);
+    if (before.assignee_id !== assignee_id) {
+      const name = db.prepare('SELECT name FROM people WHERE id = ?').get(assignee_id).name;
+      db.prepare('INSERT INTO events (action_id, kind, detail) VALUES (?, ?, ?)').run(before.id, 'reassigned', `assignee -> ${name}`);
+    }
+    res.json(db.prepare('SELECT * FROM actions WHERE id = ?').get(before.id));
+  });
+  app.delete('/api/actions/:id', (req, res) => {
+    const { id } = req.params;
+    if (!db.prepare('SELECT 1 FROM actions WHERE id = ?').get(id)) return res.status(404).json({ error: 'not found' });
+    db.transaction(() => {
+      db.prepare('DELETE FROM jobs WHERE action_id = ?').run(id);
+      db.prepare('DELETE FROM events WHERE action_id = ?').run(id);
+      db.prepare('DELETE FROM actions WHERE id = ?').run(id);
+    })();
+    res.status(204).end();
+  });
   app.get('/api/actions/:id', (req, res) => {
     const action = db.prepare('SELECT * FROM actions WHERE id = ?').get(req.params.id);
     if (!action) return res.status(404).json({ error: 'not found' });
