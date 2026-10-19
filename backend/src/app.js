@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import cors from 'cors';
 import express from 'express';
+import jwt from 'jsonwebtoken';
 import { config } from './config.js';
 
 const STATUSES = ['open', 'in_progress', 'done'];
@@ -97,6 +98,16 @@ export function createApp(db, escalation) {
       projectId: config.viasocket.projectId,
     }),
   );
+
+  // The app has no login, so the whole workspace is one viaSocket user. Never change this id:
+  // every connection and flow is isolated by it.
+  const EMBED_USER = 'action-correction-workspace';
+  app.get('/api/viasocket/token', (_req, res) => {
+    const { orgId, projectId, embedSecret } = config.viasocket;
+    if (!orgId || !projectId || !embedSecret) return res.status(503).json({ error: 'viaSocket is not configured: set VIASOCKET_ORG_ID, VIASOCKET_PROJECT_ID and VIASOCKET_EMBED_SECRET' });
+    const token = jwt.sign({ org_id: orgId, project_id: projectId, unique_identifier: EMBED_USER }, embedSecret, { algorithm: 'HS256' });
+    res.json({ token });
+  });
 
   return app;
 }
