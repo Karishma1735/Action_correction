@@ -164,6 +164,33 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
 .legend span::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; background: currentColor; }
 .legend .ok { color: var(--ok); } .legend .bad { color: var(--bad); } .legend .warn { color: var(--warn); } .legend .none { color: var(--muted); }
 
+/* Actions list */
+.page-head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.banner { background: var(--brand-soft); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 20px; font-size: 14px; }
+.banner-main { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+.banner p { margin: 0; }
+.list-card { padding: 0; overflow: hidden; }
+.seg { display: flex; gap: 2px; padding: 10px 12px 0; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.seg button { border: 0; background: transparent; color: var(--muted); font-weight: 600; padding: 8px 12px 10px; border-bottom: 2px solid transparent; white-space: nowrap; }
+.seg button:hover { color: var(--text); }
+.seg button.on { color: var(--brand); border-bottom-color: var(--brand); }
+.count { display: inline-block; min-width: 22px; text-align: center; margin-left: 4px; padding: 0 6px; border-radius: 999px; font-size: 12px; background: var(--surface-2); color: var(--muted); }
+.seg button.on .count { background: var(--brand-soft); color: var(--brand); }
+.toolbar { display: flex; gap: 10px; flex-wrap: wrap; padding: 14px 16px; }
+.toolbar input { flex: 1 1 220px; width: auto; }
+.toolbar select { width: auto; flex: 0 1 170px; }
+.list-card .table-wrap { margin: 0; }
+.actions-table th:first-child, .actions-table td:first-child { padding-left: 20px; }
+.actions-table td:last-child { padding-right: 20px; }
+.title-cell { max-width: 460px; }
+.title-cell .link { font-size: 15px; line-height: 1.35; }
+.meta { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.nowrap { white-space: nowrap; }
+.btn-row.nowrap { flex-wrap: nowrap; }
+.pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 20px; border-top: 1px solid var(--border); font-size: 14px; }
+.pager .btn-row { align-items: center; gap: 10px; }
+.list-card .empty { padding: 48px 12px; }
+
 @media (max-width: 720px) {
   .topbar-inner { padding: 0 14px; gap: 10px; }
   .brand span:last-child { display: none; }

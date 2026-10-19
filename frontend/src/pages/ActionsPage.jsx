@@ -6,6 +6,8 @@ const STATUS = { open: ['Open', 'info'], in_progress: ['In progress', 'warn'], d
 const REVIEW = { pending: ['Pending', ''], approved: ['Approved', 'ok'], rejected: ['Rejected', 'bad'], improve: ['Needs improvement', 'warn'] };
 const PRIORITY = { high: 'bad', medium: 'warn', low: 'ok' };
 const label = (map, key) => map[key] || [key, ''];
+const PAGE_SIZE = 20;
+const TABS = [['all', 'All'], ['pending', 'Pending'], ['improve', 'Needs improvement'], ['rejected', 'Rejected'], ['approved', 'Approved']];
 const EMPTY = { title: '', description: '', team_id: '', assignee_id: '', priority: '' };
 const PRIORITY_OPTIONS = [['', 'Auto (AI rates it)'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']];
 
@@ -112,6 +114,8 @@ export default function ActionsPage() {
   const [error, setError] = useState('');
   const [source, setSource] = useState(null);
   const [syncing, setSyncing] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [f, setFilters] = useState({ tab: 'all', q: '', team: '', assignee: '', priority: '', page: 1 });
 
   const load = () =>
     Promise.all([api.actions().then(setActions), api.teams().then(setTeams), api.people().then(setPeople), api.tableSource().then(setSource)]).catch((e) => setError(e.message));
@@ -144,6 +148,7 @@ export default function ActionsPage() {
     run(async () => {
       await api.addAction({ ...form, team_id: Number(form.team_id), assignee_id: Number(form.assignee_id) });
       setForm(EMPTY);
+      setShowForm(false);
     });
   };
 
@@ -155,94 +160,152 @@ export default function ActionsPage() {
   const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
   const needsSetup = teams.length === 0 || people.length === 0;
 
+  const filter = (patch) => setFilters((cur) => ({ ...cur, page: 1, ...patch }));
+  const q = f.q.trim().toLowerCase();
+  const matches = (a, ignoreTab) =>
+    (ignoreTab || f.tab === 'all' || a.review === f.tab) &&
+    (!f.team || String(a.team_id) === f.team) &&
+    (!f.assignee || String(a.assignee_id) === f.assignee) &&
+    (!f.priority || (f.priority === 'none' ? !a.priority : a.priority === f.priority)) &&
+    (!q || `${a.title} ${a.assignee_name} ${a.team_name}`.toLowerCase().includes(q));
+  const filtered = actions.filter((a) => matches(a, false));
+  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const page = Math.min(f.page, pages);
+  const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const count = (tab) => actions.filter((a) => matches(a, true) && (tab === 'all' || a.review === tab)).length;
+  const filtering = f.tab !== 'all' || f.q || f.team || f.assignee || f.priority;
+
   return (
     <>
-      <div className="page-head">
-        <h2>Actions</h2>
-        <p>Rejected or “improve” actions notify the assignee and lead, remind after 2 hours and escalate to the manager after 24.</p>
+      <div className="page-head page-head-row">
+        <div>
+          <h2>Actions</h2>
+          <p>Rejected or “improve” actions notify the assignee and lead, remind after 2 hours and escalate to the manager after 24.</p>
+        </div>
+        {!source?.config && <button className="btn primary" onClick={() => setShowForm(!showForm)}>{showForm ? 'Close' : '+ New action'}</button>}
       </div>
       {error && <p className="error">{error}</p>}
 
-      {source?.config ? (
-        <section className="card">
-          <div className="card-head">
-            <h3>Imported from “{source.config.table_name || source.config.table}”</h3>
+      {source?.config && (
+        <section className="banner">
+          <div className="banner-main">
+            <strong>Imported from “{source.config.table_name || source.config.table}”</strong>
+            <span className="muted">refreshes every {source.everyMinutes} min</span>
             <button className="btn sm primary" disabled={syncing} onClick={syncNow}>{syncing ? 'Syncing…' : 'Sync now'}</button>
           </div>
-          <p className="muted" style={{ marginTop: 0 }}>Actions come from the viaSocket Table and refresh every {source.everyMinutes} minutes. Review, notify and mark done here.</p>
           <SyncSummary sync={source.lastSync} />
         </section>
-      ) : (
-      <section className="card">
-        <div className="card-head"><h3>New action</h3></div>
-        {needsSetup && <p className="muted">Add at least one person and one team under “People &amp; teams” first.</p>}
-        <form onSubmit={create} className="grid">
-          <div className="field">
-            <label htmlFor="title">Title</label>
-            <input id="title" required placeholder="e.g. Update onboarding doc" value={form.title} onChange={set('title')} />
-          </div>
-          <div className="field">
-            <label htmlFor="description">Description</label>
-            <input id="description" placeholder="Optional" value={form.description} onChange={set('description')} />
-          </div>
-          <div className="field">
-            <label htmlFor="team">Team</label>
-            <select id="team" required value={form.team_id} onChange={set('team_id')}>
-              <option value="">Select team</option>
-              {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="assignee">Assignee</label>
-            <select id="assignee" required value={form.assignee_id} onChange={set('assignee_id')}>
-              <option value="">Select person</option>
-              {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="priority">Priority</label>
-            <select id="priority" value={form.priority} onChange={set('priority')}>
-              {PRIORITY_OPTIONS.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
-            </select>
-          </div>
-          <button className="btn primary" disabled={needsSetup}>Create action</button>
-        </form>
-      </section>
       )}
 
-      <section className="card">
-        <div className="card-head"><h3>All actions</h3><span className="muted">{actions.length} total</span></div>
+      {!source?.config && showForm && (
+        <section className="card">
+          {needsSetup && <p className="muted">Add at least one person and one team under “People &amp; teams” first.</p>}
+          <form onSubmit={create} className="grid">
+            <div className="field">
+              <label htmlFor="title">Title</label>
+              <input id="title" required autoFocus placeholder="e.g. Update onboarding doc" value={form.title} onChange={set('title')} />
+            </div>
+            <div className="field">
+              <label htmlFor="description">Description</label>
+              <input id="description" placeholder="Optional" value={form.description} onChange={set('description')} />
+            </div>
+            <div className="field">
+              <label htmlFor="team">Team</label>
+              <select id="team" required value={form.team_id} onChange={set('team_id')}>
+                <option value="">Select team</option>
+                {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="assignee">Assignee</label>
+              <select id="assignee" required value={form.assignee_id} onChange={set('assignee_id')}>
+                <option value="">Select person</option>
+                {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="priority">Priority</label>
+              <select id="priority" value={form.priority} onChange={set('priority')}>
+                {PRIORITY_OPTIONS.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
+              </select>
+            </div>
+            <button className="btn primary" disabled={needsSetup}>Create action</button>
+          </form>
+        </section>
+      )}
+
+      <section className="card list-card">
+        <div className="seg" role="tablist">
+          {TABS.map(([key, text]) => (
+            <button key={key} role="tab" aria-selected={f.tab === key} className={f.tab === key ? 'on' : ''} onClick={() => filter({ tab: key })}>
+              {text} <span className="count">{count(key)}</span>
+            </button>
+          ))}
+        </div>
+        <div className="toolbar">
+          <input type="search" placeholder="Search title, person or team…" value={f.q} onChange={(e) => filter({ q: e.target.value })} aria-label="Search actions" />
+          <select value={f.team} onChange={(e) => filter({ team: e.target.value })} aria-label="Team">
+            <option value="">All teams</option>
+            {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+          <select value={f.assignee} onChange={(e) => filter({ assignee: e.target.value })} aria-label="Assignee">
+            <option value="">All assignees</option>
+            {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <select value={f.priority} onChange={(e) => filter({ priority: e.target.value })} aria-label="Priority">
+            <option value="">Any priority</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+            <option value="none">No priority</option>
+          </select>
+          {filtering && <button className="btn sm" onClick={() => setFilters({ tab: 'all', q: '', team: '', assignee: '', priority: '', page: 1 })}>Clear</button>}
+        </div>
+
         {actions.length === 0 ? (
-          <div className="empty"><strong>No actions yet</strong>Create one above to get started.</div>
+          <div className="empty"><strong>No actions yet</strong>{source?.config ? 'Press “Sync now” to import from the table.' : 'Use “+ New action” to add one.'}</div>
+        ) : filtered.length === 0 ? (
+          <div className="empty"><strong>No actions match</strong>Try a different search or clear the filters.</div>
         ) : (
-          <div className="table-wrap">
-            <table>
-              <thead><tr><th>Title</th><th>Team</th><th>Assignee</th><th>Review</th><th>Status</th><th>Priority</th><th /></tr></thead>
-              <tbody>
-                {actions.map((a) => {
-                  const [reviewText, reviewTone] = label(REVIEW, a.review);
-                  const [statusText, statusTone] = label(STATUS, a.status);
-                  return (
-                    <tr key={a.id}>
-                      <td><button className="link" onClick={() => api.action(a.id).then(setOpen)}>{a.title}</button></td>
-                      <td>{a.team_name}</td>
-                      <td>{a.assignee_name}</td>
-                      <td><Badge tone={reviewTone}>{reviewText}</Badge></td>
-                      <td><Badge tone={statusTone}>{statusText}</Badge></td>
-                      <td>{a.priority ? <Badge tone={PRIORITY[a.priority] || ''}>{a.priority}</Badge> : <span className="muted">–</span>}</td>
-                      <td>
-                        <div className="btn-row">
-                          <button className="btn sm success" disabled={a.review === 'approved'} onClick={() => run(() => api.approve(a.id))}>Approve</button>
-                          <button className="btn sm danger" onClick={() => setDialog({ action: a, decision: 'rejected' })}>Reject</button>
-                          <button className="btn sm" onClick={() => setDialog({ action: a, decision: 'improve' })}>Improve</button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div className="table-wrap">
+              <table className="actions-table">
+                <thead><tr><th>Action</th><th>Review</th><th>Status</th><th>Priority</th><th /></tr></thead>
+                <tbody>
+                  {visible.map((a) => {
+                    const [reviewText, reviewTone] = label(REVIEW, a.review);
+                    const [statusText, statusTone] = label(STATUS, a.status);
+                    return (
+                      <tr key={a.id}>
+                        <td className="title-cell">
+                          <button className="link" onClick={() => api.action(a.id).then(setOpen)}>{a.title}</button>
+                          <div className="meta">{a.team_name} · {a.assignee_name}</div>
+                        </td>
+                        <td><Badge tone={reviewTone}>{reviewText}</Badge></td>
+                        <td><Badge tone={statusTone}>{statusText}</Badge></td>
+                        <td>{a.priority ? <Badge tone={PRIORITY[a.priority] || ''}>{a.priority}</Badge> : <span className="muted">–</span>}</td>
+                        <td className="nowrap">
+                          <div className="btn-row nowrap">
+                            <button className="btn sm success" disabled={a.review === 'approved'} onClick={() => run(() => api.approve(a.id))}>Approve</button>
+                            <button className="btn sm danger" onClick={() => setDialog({ action: a, decision: 'rejected' })}>Reject</button>
+                            <button className="btn sm" onClick={() => setDialog({ action: a, decision: 'improve' })}>Improve</button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="pager">
+              <span className="muted">{(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}{filtered.length !== actions.length ? ` (${actions.length} total)` : ''}</span>
+              <div className="btn-row">
+                <button className="btn sm" disabled={page <= 1} onClick={() => setFilters({ ...f, page: page - 1 })}>Previous</button>
+                <span className="muted pager-now">Page {page} of {pages}</span>
+                <button className="btn sm" disabled={page >= pages} onClick={() => setFilters({ ...f, page: page + 1 })}>Next</button>
+              </div>
+            </div>
+          </>
         )}
       </section>
 
@@ -270,6 +333,7 @@ export default function ActionsPage() {
               <Badge tone={label(REVIEW, open.review)[1]}>{label(REVIEW, open.review)[0]}</Badge>
               {open.priority && <Badge tone={PRIORITY[open.priority] || ''}>{open.priority} priority</Badge>}
             </div>
+            {/^https?:\/\//.test(open.description || '') && <p style={{ margin: '12px 0 0' }}><a href={open.description} target="_blank" rel="noreferrer">Open the linked page ↗</a></p>}
             <ManageAction
               key={`${open.id}-${open.updated_at}`}
               action={open}
