@@ -87,10 +87,13 @@ go();
   });
 
   app.put('/api/people/:id', (req, res) => {
-    const { name, email, slack_id } = req.body;
+    const { name, email } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
-    const info = db.prepare('UPDATE people SET name = ?, email = ?, slack_id = ? WHERE id = ?').run(name, email || null, slack_id || null, req.params.id);
-    if (!info.changes) return res.status(404).json({ error: 'not found' });
+    const before = db.prepare('SELECT * FROM people WHERE id = ?').get(req.params.id);
+    if (!before) return res.status(404).json({ error: 'not found' });
+    // The Slack member id is found from the email, so a changed email clears the saved one to be found again.
+    const slackId = (email || null) === before.email ? before.slack_id : null;
+    db.prepare('UPDATE people SET name = ?, email = ?, slack_id = ? WHERE id = ?').run(name, email || null, slackId, before.id);
     res.json(db.prepare('SELECT * FROM people WHERE id = ?').get(req.params.id));
   });
   app.delete('/api/people/:id', (req, res) => {

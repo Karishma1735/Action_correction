@@ -43,7 +43,8 @@ test('email signup limited to the allowed domain, and login gates /api', async (
 });
 
 test('edit and delete people and teams', async () => {
-  const server = createApp(openDb(':memory:'), {}).listen(0);
+  const db0 = openDb(':memory:');
+  const server = createApp(db0, {}).listen(0);
   const base = `http://127.0.0.1:${server.address().port}/api`;
   try {
     const up = await post(`${base}/auth/signup`, { email: 'dev@viasocket.com', password: 'longenough1' });
@@ -55,6 +56,11 @@ test('edit and delete people and teams', async () => {
 
     const edited = await (await send('PUT', `/people/${asha.id}`, { name: 'Asha Rao', email: 'asha@viasocket.com', slack_id: 'U0ASHA123' })).json();
     assert.equal(edited.name, 'Asha Rao');
+    db0.prepare('UPDATE people SET slack_id = ? WHERE id = ?').run('U0FOUND123', asha.id); // as found by the notifier
+    const same = await (await send('PUT', `/people/${asha.id}`, { name: 'Asha Rao', email: 'asha@viasocket.com' })).json();
+    assert.equal(same.slack_id, 'U0FOUND123'); // email unchanged: kept
+    const moved = await (await send('PUT', `/people/${asha.id}`, { name: 'Asha Rao', email: 'asha.new@viasocket.com' })).json();
+    assert.equal(moved.slack_id, null); // email changed: found again next time
     assert.equal((await send('PUT', `/people/${asha.id}`, { name: '' })).status, 400);
     assert.equal((await send('PUT', '/people/999', { name: 'x' })).status, 404);
     assert.equal((await send('PUT', `/teams/${team.id}`, { name: 'Support', channel: 'sms' })).status, 400);

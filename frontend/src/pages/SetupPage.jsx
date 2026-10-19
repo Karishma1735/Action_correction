@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 
-const EMPTY_PERSON = { name: '', email: '', slack_id: '' };
+const EMPTY_PERSON = { name: '', email: '' };
 const EMPTY_TEAM = { name: '', lead_id: '', manager_id: '', channel: 'slack' };
 
 export default function SetupPage() {
@@ -30,7 +30,7 @@ export default function SetupPage() {
   };
   const resetPerson = () => { setPerson(EMPTY_PERSON); setEditingPerson(null); };
   const resetTeam = () => { setTeam(EMPTY_TEAM); setEditingTeam(null); };
-  const editPerson = (p) => { setEditingPerson(p.id); setPerson({ name: p.name, email: p.email || '', slack_id: p.slack_id || '' }); };
+  const editPerson = (p) => { setEditingPerson(p.id); setPerson({ name: p.name, email: p.email || '' }); };
   const editTeam = (t) => {
     setEditingTeam(t.id);
     setTeam({ name: t.name, lead_id: t.lead_id ? String(t.lead_id) : '', manager_id: t.manager_id ? String(t.manager_id) : '', channel: t.channel });
@@ -67,7 +67,6 @@ export default function SetupPage() {
           <form onSubmit={submit((body) => (editingPerson ? api.updatePerson(editingPerson, body) : api.addPerson(body)), person, resetPerson)} className="grid" style={{ marginBottom: 12 }}>
             <div className="field wide"><label htmlFor="pname">Name</label><input id="pname" required value={person.name} onChange={setP('name')} /></div>
             <div className="field"><label htmlFor="pemail">Email</label><input id="pemail" type="email" value={person.email} onChange={setP('email')} /></div>
-            <div className="field"><label htmlFor="pslack">Slack member ID (optional)</label><input id="pslack" placeholder="Found from email if empty" value={person.slack_id} onChange={setP('slack_id')} /></div>
             <div className="btn-row" style={{ justifyContent: 'flex-start' }}>
               <button className="btn primary">{editingPerson ? 'Save changes' : 'Add person'}</button>
               {editingPerson && <button type="button" className="btn" onClick={resetPerson}>Cancel</button>}
@@ -78,7 +77,7 @@ export default function SetupPage() {
               <div className="avatar">{initials(p.name)}</div>
               <div className="meta">
                 <div>{p.name}</div>
-                <div className="muted">{[p.email, p.slack_id].filter(Boolean).join(' · ') || 'No contact details'}</div>
+                <div className="muted">{p.email || 'No contact details'}</div>
               </div>
               <div className="btn-row" style={{ marginLeft: 'auto' }}>
                 <button className="btn sm" onClick={() => editPerson(p)}>Edit</button>
