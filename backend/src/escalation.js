@@ -25,7 +25,9 @@ export function createEscalation(db) {
 
   async function notify(ctx, recipients, subject, text, kind) {
     const notifier = getNotifier();
-    for (const to of recipients.filter(Boolean)) {
+    // One message per person, even when the assignee is also the lead or manager.
+    const unique = [...new Map(recipients.filter(Boolean).map((p) => [p.id, p])).values()];
+    for (const to of unique) {
       try {
         await notifier.send({
           channel: ctx.team.channel,

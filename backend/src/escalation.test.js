@@ -55,3 +55,11 @@ test('a second review replaces the old timers', async () => {
   await escalation.review(action, 'improve', 'Second');
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM jobs WHERE state = 'pending'").get().n, 2);
 });
+
+test('a person who is both assignee and lead gets one message, not two', async () => {
+  const { db, escalation, action } = setup();
+  const asha = db.prepare("SELECT id FROM people WHERE name = 'Asha'").get().id;
+  db.prepare('UPDATE teams SET lead_id = ?').run(asha);
+  await escalation.review(action, 'rejected', 'Missing tax field');
+  assert.equal(kinds(db, action).filter((k) => k === 'sent:initial').length, 1);
+});
