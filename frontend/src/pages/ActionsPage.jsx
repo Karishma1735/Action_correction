@@ -114,6 +114,17 @@ export default function ActionsPage() {
     Promise.all([api.actions().then(setActions), api.teams().then(setTeams), api.people().then(setPeople)]).catch((e) => setError(e.message));
   useEffect(() => { load(); }, []);
 
+  // Pick up changes made elsewhere, e.g. someone pressing "Mark as done" in Slack or email.
+  const openId = open?.id;
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.hidden) return;
+      load();
+      if (openId) api.action(openId).then((a) => setOpen((cur) => (cur && cur.id === a.id ? a : cur))).catch(() => {});
+    }, 10_000);
+    return () => clearInterval(id);
+  }, [openId]);
+
   const run = async (fn) => {
     setError('');
     try {

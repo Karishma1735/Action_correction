@@ -3,6 +3,7 @@ import { runAction } from '../viasocket/client.js';
 // Action versions, from the viaSocket documents of each app.
 const SLACK_GET_USER = 'rowrubgppa5r'; // Get User Information
 const SLACK_SEND_DM = 'rowa5mg9fywy'; // Send Direct Message
+const SLACK_SEND_MESSAGE = 'rowj2u3wc8h5'; // Send Message (supports link buttons)
 const GMAIL_SEND = 'rowwj0sfmhub'; // Send Email
 
 const SLACK_ID = /^[UW][A-Z0-9]{6,}$/;
@@ -36,9 +37,25 @@ async function resolveSlackId(person, remember) {
 // Delivers Slack DMs and email through the Slack/Gmail accounts connected on the Integrations page.
 export const viasocketNotifier = {
   name: 'viasocket',
-  async send({ channel, to, subject, text, rememberSlackId }) {
+  async send({ channel, to, subject, text, doneUrl, rememberSlackId }) {
     if (channel === 'slack') {
       const userId = await resolveSlackId(to, rememberSlackId);
+      if (doneUrl) {
+        // A DM with a "Mark as done" button (a link button: the action's buttons open a URL).
+        try {
+          await runAction('slack', SLACK_SEND_MESSAGE, {
+            destination: { messageto: 'user', userId: [userId] },
+            markdown_content: `*${subject}*\n${text}`,
+            buttons: { '✅ Mark as done': doneUrl },
+            bot_details: { bot_name: 'Action Correction' },
+            preview: { unfurl_links: false, unfurl_media: false },
+          });
+          return;
+        } catch (err) {
+          console.warn('Slack button message failed, sending a plain DM with the link:', err.message);
+          text = `${text}\n\nMark as done: ${doneUrl}`;
+        }
+      }
       await runAction('slack', SLACK_SEND_DM, {
         userId,
         content: `*${subject}*\n${text}`,
@@ -53,7 +70,9 @@ export const viasocketNotifier = {
       await runAction('gmail', GMAIL_SEND, {
         to: to.email,
         subject,
-        messageBody: text.split(/\n{2,}/).map((para) => `<p>${escapeHtml(para).replace(/\n/g, '<br>')}</p>`).join(''),
+        messageBody:
+          text.split(/\n{2,}/).map((para) => `<p>${escapeHtml(para).replace(/\n/g, '<br>')}</p>`).join('') +
+          (doneUrl ? `<p><a href="${escapeHtml(doneUrl)}">Mark as done</a></p>` : ''),
       });
       return;
     }

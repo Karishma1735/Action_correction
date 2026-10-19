@@ -2,6 +2,7 @@ import { config } from './config.js';
 import { analyzeFeedback } from './agent/gemini.js';
 import { getNotifier } from './notifier/index.js';
 import { composeMessage } from './agent/messageWriter.js';
+import { doneUrl } from './doneLink.js';
 
 const iso = (date) => date.toISOString().replace('T', ' ').slice(0, 19);
 const minutesFromNow = (m) => iso(new Date(Date.now() + m * 60_000));
@@ -45,6 +46,7 @@ export function createEscalation(db) {
           to,
           subject: message.subject,
           text: message.text,
+          doneUrl: doneUrl(ctx.action.id, to.id),
           rememberSlackId: (id) => db.prepare('UPDATE people SET slack_id = ? WHERE id = ?').run(id, to.id),
         });
         logEvent(ctx.action.id, `sent:${kind}`, `${ctx.team.channel} -> ${to.name} (${message.source === 'ai' ? 'AI-written' : 'template'})`);

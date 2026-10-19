@@ -8,6 +8,8 @@ const num = (value, fallback) => {
 
 export const config = {
   port: num(process.env.PORT, 4000),
+  // Public address of this app, used in "Mark as done" links. Defaults to FRONTEND_ORIGIN.
+  publicUrl: (process.env.APP_URL || process.env.FRONTEND_ORIGIN || 'http://localhost:5173').replace(/\/$/, ''),
   frontendOrigin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173',
   dbPath: process.env.DB_PATH || (process.env.DATA_DIR ? path.join(process.env.DATA_DIR, 'app.db') : './data.db'),
   remindAfterMinutes: num(process.env.REMIND_AFTER_MINUTES, 120),

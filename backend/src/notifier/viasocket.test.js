@@ -68,3 +68,32 @@ test('not connected: says which app to connect', async () => {
   fakeViaSocket({ connected: [] });
   await assert.rejects(viasocketNotifier.send({ channel: 'email', to: person, subject: 's', text: 't' }), /Gmail is not connected/);
 });
+
+test('slack: with a done link the DM carries a Mark as done button', async () => {
+  const calls = fakeViaSocket();
+  await viasocketNotifier.send({ channel: 'slack', to: { ...person, slack_id: 'U0SAVEDID' }, subject: 'Subj', text: 'Body', doneUrl: 'https://app.test/done/tok' });
+  const run = calls.find((c) => c.url.includes('/func/') && c.body.action_version_id === 'rowj2u3wc8h5');
+  assert.deepEqual(run.body.inputData.destination, { messageto: 'user', userId: ['U0SAVEDID'] });
+  assert.deepEqual(run.body.inputData.buttons, { '✅ Mark as done': 'https://app.test/done/tok' });
+  assert.match(run.body.inputData.markdown_content, /Subj/);
+});
+
+test('slack: if the button message is refused, a plain DM with the link is sent', async () => {
+  const calls = fakeViaSocket();
+  const inner = globalThis.fetch;
+  globalThis.fetch = async (url, opts = {}) => {
+    const body = opts.body ? JSON.parse(opts.body) : undefined;
+    if (url.includes('/func/') && body?.action_version_id === 'rowj2u3wc8h5') return { ok: true, status: 200, json: async () => ({ success: false, message: 'nope' }) };
+    return inner(url, opts);
+  };
+  await viasocketNotifier.send({ channel: 'slack', to: { ...person, slack_id: 'U0SAVEDID' }, subject: 'S', text: 'T', doneUrl: 'https://app.test/done/tok' });
+  const dm = calls.find((c) => c.body?.action_version_id === 'rowa5mg9fywy');
+  assert.match(dm.body.inputData.content, /Mark as done: https:\/\/app.test\/done\/tok/);
+});
+
+test('email: the done link is added as a link', async () => {
+  const calls = fakeViaSocket();
+  await viasocketNotifier.send({ channel: 'email', to: person, subject: 'S', text: 'T', doneUrl: 'https://app.test/done/tok?a=1&b=2' });
+  const run = calls.find((c) => c.url.includes('/func/scrGMAIL'));
+  assert.match(run.body.inputData.messageBody, /<a href="https:\/\/app.test\/done\/tok\?a=1&amp;b=2">Mark as done<\/a>/);
+});

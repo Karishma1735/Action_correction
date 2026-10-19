@@ -87,3 +87,31 @@ test('edit and delete people and teams', async () => {
     server.close();
   }
 });
+
+test('done link marks the action done without a login, and only with a valid token', async () => {
+  const db = openDb(':memory:');
+  const server = createApp(db, (await import('./escalation.js')).createEscalation(db)).listen(0);
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const { doneUrl } = await import('./doneLink.js');
+  try {
+    const p = db.prepare("INSERT INTO people (name) VALUES ('Asha')").run().lastInsertRowid;
+    const t = db.prepare("INSERT INTO teams (name) VALUES ('Ops')").run().lastInsertRowid;
+    const a = db.prepare("INSERT INTO actions (title, team_id, assignee_id) VALUES ('Fix <b>', ?, ?)").run(t, p).lastInsertRowid;
+    const token = doneUrl(a, p).split('/done/')[1];
+
+    const page = await fetch(`${origin}/done/${token}`); // a scanner only GETs: nothing changes
+    assert.equal(page.status, 200);
+    assert.match(await page.text(), /Fix &lt;b&gt;/);
+    assert.equal(db.prepare('SELECT status FROM actions WHERE id = ?').get(a).status, 'open');
+
+    assert.equal((await fetch(`${origin}/done/${token}`, { method: 'POST' })).status, 200);
+    assert.equal(db.prepare('SELECT status FROM actions WHERE id = ?').get(a).status, 'done');
+    assert.equal((await fetch(`${origin}/done/${token}`, { method: 'POST' })).status, 200); // idempotent
+    assert.ok(db.prepare("SELECT 1 FROM events WHERE action_id = ? AND kind = 'done_via_link'").get(a));
+
+    assert.equal((await fetch(`${origin}/done/not-a-token`, { method: 'POST' })).status, 400);
+    assert.equal((await fetch(`${origin}/api/people`)).status, 401); // the rest still needs a login
+  } finally {
+    server.close();
+  }
+});

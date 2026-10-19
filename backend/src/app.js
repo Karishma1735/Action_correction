@@ -6,6 +6,7 @@ import cors from 'cors';
 import express from 'express';
 import { config } from './config.js';
 import { createAuth } from './auth.js';
+import { readDoneToken } from './doneLink.js';
 import { embedToken, findAuthId, SERVICES } from './viasocket/client.js';
 import { viasocketNotifier } from './notifier/viasocket.js';
 
@@ -13,6 +14,11 @@ const STATUSES = ['open', 'in_progress', 'done'];
 const DECISIONS = ['rejected', 'improve'];
 const PRIORITIES = ['low', 'medium', 'high'];
 const priorityOf = (v) => (v === '' || v == null ? null : PRIORITIES.includes(v) ? v : undefined);
+
+
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const donePage = (body) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Action Correction</title>
+<style>body{font:16px/1.5 system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;background:#f5f6fa;color:#171a22}main{background:#fff;border:1px solid #e3e6ee;border-radius:12px;padding:32px;max-width:420px;text-align:center}button{font:inherit;font-weight:600;background:#4f46e5;color:#fff;border:0;border-radius:8px;padding:10px 18px;cursor:pointer}.ok{color:#067647}.bad{color:#b42318}</style></head><body><main>${body}</main></body></html>`;
 
 function secretMatches(provided) {
   const a = Buffer.from(String(provided || ''));
@@ -27,6 +33,42 @@ export function createApp(db, escalation) {
   app.use(express.json());
 
   app.get('/api/health', (_req, res) => res.json({ ok: true, notifier: config.notifier }));
+
+  // "Mark as done" link from a notification. The signed token is the credential, so no login is needed.
+  // The page confirms with a POST from script so link scanners that only fetch the URL change nothing.
+  app.get('/done/:token', (req, res) => {
+    const claims = readDoneToken(req.params.token);
+    if (!claims) return res.status(400).send(donePage('<h2 class="bad">This link is not valid or has expired.</h2><p>Open the app to mark the action as done.</p>'));
+    const action = db.prepare('SELECT title, status FROM actions WHERE id = ?').get(claims.actionId);
+    if (!action) return res.status(404).send(donePage('<h2 class="bad">This action no longer exists.</h2>'));
+    res.send(donePage(`<h2 id="t">Marking “${escapeHtml(action.title)}” as done…</h2><p id="m"></p><button id="b" hidden>Mark as done</button>
+<script>
+const url = location.pathname;
+async function go() {
+  const t = document.getElementById('t'), m = document.getElementById('m'), b = document.getElementById('b');
+  try {
+    const r = await fetch(url, { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
+    t.className = 'ok'; t.textContent = '✓ Marked as done'; m.textContent = 'You can close this tab.'; b.hidden = true;
+  } catch (e) { t.className = 'bad'; t.textContent = 'Could not mark it as done'; m.textContent = e.message; b.hidden = false; }
+}
+document.getElementById('b').onclick = go;
+go();
+</script>`));
+  });
+  app.post('/done/:token', (req, res) => {
+    const claims = readDoneToken(req.params.token);
+    if (!claims) return res.status(400).json({ error: 'This link is not valid or has expired.' });
+    const action = db.prepare('SELECT * FROM actions WHERE id = ?').get(claims.actionId);
+    if (!action) return res.status(404).json({ error: 'This action no longer exists.' });
+    if (action.status !== 'done') {
+      escalation.setStatus(action.id, 'done');
+      const who = db.prepare('SELECT name FROM people WHERE id = ?').get(claims.personId)?.name ?? 'someone';
+      db.prepare('INSERT INTO events (action_id, kind, detail) VALUES (?, ?, ?)').run(action.id, 'done_via_link', `marked done by ${who} from a notification`);
+    }
+    res.json({ ok: true, title: action.title });
+  });
 
   const auth = createAuth(db);
   app.post('/api/auth/signup', auth.signup);
