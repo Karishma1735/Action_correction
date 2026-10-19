@@ -21,6 +21,12 @@ export const config = {
     apiUrl: process.env.VIASOCKET_API_URL || 'https://flow-api.viasocket.com',
     runUrl: process.env.VIASOCKET_RUN_URL || 'https://flow.sokt.io',
   },
+  // Who writes the notification text: viaSocket's built-in AI (no model key needed), or the fixed template.
+  messageAi: {
+    enabled: (process.env.MESSAGE_AI || 'on') !== 'off',
+    service: process.env.MESSAGE_AI_SERVICE || 'openai',
+    model: process.env.MESSAGE_AI_MODEL || 'gpt-5-mini',
+  },
   gemini: {
     apiKey: process.env.GEMINI_API_KEY,
     model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',

@@ -1,6 +1,7 @@
 import { config } from './config.js';
 import { analyzeFeedback } from './agent/gemini.js';
 import { getNotifier } from './notifier/index.js';
+import { composeMessage } from './agent/messageWriter.js';
 
 const iso = (date) => date.toISOString().replace('T', ' ').slice(0, 19);
 const minutesFromNow = (m) => iso(new Date(Date.now() + m * 60_000));
@@ -23,20 +24,30 @@ export function createEscalation(db) {
     };
   }
 
-  async function notify(ctx, recipients, subject, text, kind) {
+  // recipients: [{ person, role }]. One message per person, even when the assignee is also the lead or manager.
+  async function notify(ctx, recipients, template, kind) {
     const notifier = getNotifier();
-    // One message per person, even when the assignee is also the lead or manager.
-    const unique = [...new Map(recipients.filter(Boolean).map((p) => [p.id, p])).values()];
-    for (const to of unique) {
+    const byPerson = new Map();
+    for (const { person, role } of recipients) {
+      if (!person) continue;
+      const entry = byPerson.get(person.id) ?? { person, roles: [] };
+      entry.roles.push(role);
+      byPerson.set(person.id, entry);
+    }
+    for (const { person: to, roles } of byPerson.values()) {
       try {
+        // Only real deliveries use the AI writer; the dev "log" notifier keeps the fixed text.
+        const message = notifier.name === 'viasocket'
+          ? await composeMessage({ ctx, person: to, roles, kind }, template)
+          : { ...template, source: 'template' };
         await notifier.send({
           channel: ctx.team.channel,
           to,
-          subject,
-          text,
+          subject: message.subject,
+          text: message.text,
           rememberSlackId: (id) => db.prepare('UPDATE people SET slack_id = ? WHERE id = ?').run(id, to.id),
         });
-        logEvent(ctx.action.id, `sent:${kind}`, `${ctx.team.channel} -> ${to.name}`);
+        logEvent(ctx.action.id, `sent:${kind}`, `${ctx.team.channel} -> ${to.name} (${message.source === 'ai' ? 'AI-written' : 'template'})`);
       } catch (err) {
         logEvent(ctx.action.id, `send_failed:${kind}`, `${to.name}: ${err.message}`);
       }
@@ -70,9 +81,11 @@ export function createEscalation(db) {
     const ctx = loadContext(actionId);
     await notify(
       ctx,
-      [ctx.assignee, ctx.lead],
-      `Action ${decision}: ${ctx.action.title}`,
-      `"${ctx.action.title}" was marked ${decision}. ${analysis.summary} (priority: ${analysis.priority}). Please fix it and mark it Done.`,
+      [{ person: ctx.assignee, role: 'assignee' }, { person: ctx.lead, role: 'team lead' }],
+      {
+        subject: `Action ${decision}: ${ctx.action.title}`,
+        text: `"${ctx.action.title}" was marked ${decision}. ${analysis.summary} (priority: ${ctx.action.priority || analysis.priority}). Please fix it and mark it Done.`,
+      },
       'initial',
     );
     return ctx.action;
@@ -102,17 +115,18 @@ export function createEscalation(db) {
     if (job.type === 'remind') {
       await notify(
         ctx,
-        [ctx.assignee, ctx.lead],
-        `Reminder: ${action.title}`,
-        `Reminder: "${action.title}" is still ${action.status}. ${action.ai_summary || ''} Please update the status.`,
+        [{ person: ctx.assignee, role: 'assignee' }, { person: ctx.lead, role: 'team lead' }],
+        { subject: `Reminder: ${action.title}`, text: `Reminder: "${action.title}" is still ${action.status}. ${action.ai_summary || ''} Please update the status.` },
         'remind',
       );
     } else {
       await notify(
         ctx,
-        [ctx.manager],
-        `Escalation: ${action.title}`,
-        `"${action.title}" (assignee: ${ctx.assignee.name}, priority: ${action.priority}) was not completed within ${config.escalateAfterMinutes} minutes. ${action.ai_summary || ''}`,
+        [{ person: ctx.manager, role: 'manager' }],
+        {
+          subject: `Escalation: ${action.title}`,
+          text: `"${action.title}" (assignee: ${ctx.assignee.name}, priority: ${action.priority}) was not completed within ${config.escalateAfterMinutes} minutes. ${action.ai_summary || ''}`,
+        },
         'escalate',
       );
     }

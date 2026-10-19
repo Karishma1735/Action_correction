@@ -20,4 +20,6 @@ is **not wired yet** (see `backend/src/notifier/viasocket.js`).
 
 Login: email + password accounts; sign-up is limited to `ALLOWED_EMAIL_DOMAIN` (default `viasocket.com`). Set `SESSION_SECRET` in `backend/.env`; every `/api` route except health and auth needs the session cookie (12h). Without it the API answers 503.
 
+Message wording: with `NOTIFIER=viasocket`, each notification is written per recipient and role by viaSocket's built-in AI (`backend/src/agent/messageWriter.js`; `MESSAGE_AI=off` or any AI failure falls back to the fixed template). The action history shows `(AI-written)` or `(template)`.
+
 Tests: `cd backend && npm test`

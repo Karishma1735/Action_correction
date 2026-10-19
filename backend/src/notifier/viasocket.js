@@ -53,7 +53,7 @@ export const viasocketNotifier = {
       await runAction('gmail', GMAIL_SEND, {
         to: to.email,
         subject,
-        messageBody: `<p>Hi ${escapeHtml(to.name)},</p><p>${escapeHtml(text)}</p>`,
+        messageBody: text.split(/\n{2,}/).map((para) => `<p>${escapeHtml(para).replace(/\n/g, '<br>')}</p>`).join(''),
       });
       return;
     }

@@ -70,3 +70,24 @@ export async function runAction(serviceName, actionVersionId, inputData) {
   }
   return envelope ? payload.data : payload;
 }
+
+// Asks viaSocket's built-in AI (no model key of our own). `schema` makes the answer a JSON object.
+export async function askAi({ threadId, prompt, message, schema, service, model, timeoutMs = 30_000 }) {
+  const res = await fetch(`${config.viasocket.apiUrl}/embed/ai/message`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: embedToken() },
+    body: JSON.stringify({
+      thread_id: threadId,
+      message,
+      prompt,
+      service,
+      model,
+      response_type: 'json_schema',
+      json_schema: { name: schema.name, strict: true, schema: schema.schema },
+    }),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || payload.success === false) throw new Error(payload.message || `viaSocket AI failed (${res.status})`);
+  return payload.data.content;
+}
