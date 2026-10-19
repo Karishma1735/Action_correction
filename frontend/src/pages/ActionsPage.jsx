@@ -216,7 +216,6 @@ export default function ActionsPage() {
                           <button className="btn sm success" disabled={a.review === 'approved'} onClick={() => run(() => api.approve(a.id))}>Approve</button>
                           <button className="btn sm danger" onClick={() => setDialog({ action: a, decision: 'rejected' })}>Reject</button>
                           <button className="btn sm" onClick={() => setDialog({ action: a, decision: 'improve' })}>Improve</button>
-                          <button className="btn sm success" disabled={a.status === 'done'} onClick={() => run(() => api.setStatus(a.id, 'done'))}>Done</button>
                         </div>
                       </td>
                     </tr>
