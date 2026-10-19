@@ -24,7 +24,7 @@ export const config = {
     model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
   },
   auth: {
-    password: process.env.APP_PASSWORD,
+    allowedEmailDomain: (process.env.ALLOWED_EMAIL_DOMAIN || 'viasocket.com').toLowerCase(),
     sessionSecret: process.env.SESSION_SECRET,
     secureCookie: process.env.NODE_ENV === 'production',
   },

@@ -25,7 +25,8 @@ export function createApp(db, escalation) {
 
   app.get('/api/health', (_req, res) => res.json({ ok: true, notifier: config.notifier }));
 
-  const auth = createAuth();
+  const auth = createAuth(db);
+  app.post('/api/auth/signup', auth.signup);
   app.post('/api/auth/login', auth.login);
   app.post('/api/auth/logout', auth.logout);
   app.get('/api/auth/me', auth.me);
