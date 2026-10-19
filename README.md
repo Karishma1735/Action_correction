@@ -22,4 +22,6 @@ Login: email + password accounts; sign-up is limited to `ALLOWED_EMAIL_DOMAIN` (
 
 Message wording: with `NOTIFIER=viasocket`, each notification is written per recipient and role by viaSocket's built-in AI (`backend/src/agent/messageWriter.js`; `MESSAGE_AI=off` or any AI failure falls back to the fixed template). The action history shows `(AI-written)` or `(template)`.
 
+Actions source: on the Integrations page choose a viaSocket Table; its rows are pulled every `TABLE_SYNC_MINUTES` (default 5) and on "Sync now", matched by row id so nothing is duplicated, and review/done status are never overwritten by an import. Revert point before this feature: commit `404bf7f`.
+
 Tests: `cd backend && npm test`

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
+import { SyncSummary } from './TableSourceCard.jsx';
 
 const STATUS = { open: ['Open', 'info'], in_progress: ['In progress', 'warn'], done: ['Done', 'ok'] };
 const REVIEW = { pending: ['Pending', ''], approved: ['Approved', 'ok'], rejected: ['Rejected', 'bad'], improve: ['Needs improvement', 'warn'] };
@@ -109,9 +110,11 @@ export default function ActionsPage() {
   const [open, setOpen] = useState(null);
   const [dialog, setDialog] = useState(null);
   const [error, setError] = useState('');
+  const [source, setSource] = useState(null);
+  const [syncing, setSyncing] = useState(false);
 
   const load = () =>
-    Promise.all([api.actions().then(setActions), api.teams().then(setTeams), api.people().then(setPeople)]).catch((e) => setError(e.message));
+    Promise.all([api.actions().then(setActions), api.teams().then(setTeams), api.people().then(setPeople), api.tableSource().then(setSource)]).catch((e) => setError(e.message));
   useEffect(() => { load(); }, []);
 
   // Pick up changes made elsewhere, e.g. someone pressing "Mark as done" in Slack or email.
@@ -144,6 +147,11 @@ export default function ActionsPage() {
     });
   };
 
+  const syncNow = async () => {
+    setSyncing(true);
+    setError('');
+    try { setSource(await api.syncTableSource()); await load(); } catch (err) { setError(err.message); } finally { setSyncing(false); }
+  };
   const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
   const needsSetup = teams.length === 0 || people.length === 0;
 
@@ -155,6 +163,16 @@ export default function ActionsPage() {
       </div>
       {error && <p className="error">{error}</p>}
 
+      {source?.config ? (
+        <section className="card">
+          <div className="card-head">
+            <h3>Imported from “{source.config.table_name || source.config.table}”</h3>
+            <button className="btn sm primary" disabled={syncing} onClick={syncNow}>{syncing ? 'Syncing…' : 'Sync now'}</button>
+          </div>
+          <p className="muted" style={{ marginTop: 0 }}>Actions come from the viaSocket Table and refresh every {source.everyMinutes} minutes. Review, notify and mark done here.</p>
+          <SyncSummary sync={source.lastSync} />
+        </section>
+      ) : (
       <section className="card">
         <div className="card-head"><h3>New action</h3></div>
         {needsSetup && <p className="muted">Add at least one person and one team under “People &amp; teams” first.</p>}
@@ -190,6 +208,7 @@ export default function ActionsPage() {
           <button className="btn primary" disabled={needsSetup}>Create action</button>
         </form>
       </section>
+      )}
 
       <section className="card">
         <div className="card-head"><h3>All actions</h3><span className="muted">{actions.length} total</span></div>

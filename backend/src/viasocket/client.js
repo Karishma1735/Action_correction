@@ -7,7 +7,8 @@ import { config } from '../config.js';
 export const EMBED_USER = 'action-correction-workspace';
 
 // service_id of each app, exactly as the viaSocket catalog returns it.
-export const SERVICES = { slack: 'rowbu58rc', gmail: 'rowo0bqrhj5g' };
+export const SERVICES = { slack: 'rowbu58rc', gmail: 'rowo0bqrhj5g', table: 'rowe71n93' };
+const DISPLAY = { slack: 'Slack', gmail: 'Gmail', table: 'viaSocket Table' };
 
 export function embedToken(uniqueIdentifier = EMBED_USER) {
   const { orgId, projectId, embedSecret } = config.viasocket;
@@ -54,7 +55,7 @@ export async function runAction(serviceName, actionVersionId, inputData) {
   const serviceId = SERVICES[serviceName];
   const authId = await findAuthId(serviceId);
   if (!authId) {
-    throw new Error(`${serviceName === 'slack' ? 'Slack' : 'Gmail'} is not connected (or its sign-in expired): connect it on the Integrations page`);
+    throw new Error(`${DISPLAY[serviceName]} is not connected (or its sign-in expired): connect it on the Integrations page`);
   }
   const scriptId = await getScriptId(serviceId, authId);
   const res = await fetch(`${config.viasocket.runUrl}/func/${scriptId}`, {
@@ -90,4 +91,16 @@ export async function askAi({ threadId, prompt, message, schema, service, model,
   const payload = await res.json().catch(() => ({}));
   if (!res.ok || payload.success === false) throw new Error(payload.message || `viaSocket AI failed (${res.status})`);
   return payload.data.content;
+}
+
+// The values one field accepts, as [{ label, value }]. existingFields is nested like inputData.
+export async function listOptions(serviceName, actionVersionId, fieldKey, existingFields = {}) {
+  const authId = await findAuthId(SERVICES[serviceName]);
+  if (!authId) throw new Error(`${DISPLAY[serviceName]} is not connected (or its sign-in expired): connect it on the Integrations page`);
+  const data = await api(`/embed/list-options/${actionVersionId}`, { method: 'POST', body: { fieldKey, auth_id: authId, existingFields } });
+  // An unreadable connection answers 200 with the failure nested in data.response.
+  if (data && !Array.isArray(data) && data.response && Number(data.response.status) >= 400) {
+    throw new Error(data.response.data?.message || 'list-options failed');
+  }
+  return Array.isArray(data) ? data : data?.data ?? [];
 }

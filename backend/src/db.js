@@ -60,5 +60,11 @@ export function openDb(path = config.dbPath) {
   if (!db.prepare("SELECT 1 FROM pragma_table_info('actions') WHERE name = 'priority_manual'").get()) {
     db.exec('ALTER TABLE actions ADD COLUMN priority_manual INTEGER NOT NULL DEFAULT 0');
   }
+  // Added later: actions imported from a viaSocket Table remember the row they came from.
+  if (!db.prepare("SELECT 1 FROM pragma_table_info('actions') WHERE name = 'source_row_id'").get()) {
+    db.exec('ALTER TABLE actions ADD COLUMN source_row_id TEXT');
+  }
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS actions_source_row ON actions(source_row_id) WHERE source_row_id IS NOT NULL');
+  db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
   return db;
 }

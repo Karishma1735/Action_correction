@@ -26,7 +26,7 @@ function secretMatches(provided) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-export function createApp(db, escalation) {
+export function createApp(db, escalation, tableSource) {
   const app = express();
   app.set('trust proxy', 1);
   app.use(cors({ origin: config.frontendOrigin }));
@@ -277,6 +277,26 @@ go();
     } catch (err) {
       res.status(502).json({ error: err.message });
     }
+  });
+
+  // Where actions come from: a viaSocket Table, pulled on a timer and on demand.
+  const tableSourceStatus = () => ({ config: tableSource.getConfig(), lastSync: tableSource.lastSync(), everyMinutes: config.tableSyncMinutes });
+  app.get('/api/table-source', (_req, res) => res.json(tableSourceStatus()));
+  app.get('/api/table-source/tables', async (_req, res) => {
+    try { res.json(await tableSource.listTables()); } catch (err) { res.status(502).json({ error: err.message }); }
+  });
+  app.get('/api/table-source/columns', async (req, res) => {
+    if (!req.query.table) return res.status(400).json({ error: 'table is required' });
+    try { res.json(await tableSource.listColumns(String(req.query.table))); } catch (err) { res.status(502).json({ error: err.message }); }
+  });
+  app.put('/api/table-source', (req, res) => {
+    try { tableSource.saveConfig(req.body); res.json(tableSourceStatus()); } catch (err) { res.status(400).json({ error: err.message }); }
+  });
+  app.delete('/api/table-source', (_req, res) => { tableSource.clearConfig(); res.status(204).end(); });
+  app.post('/api/table-source/sync', async (_req, res) => {
+    if (!tableSource.getConfig()) return res.status(400).json({ error: 'Choose a table first' });
+    await tableSource.sync();
+    res.json(tableSourceStatus());
   });
 
   // Sends one real message through viaSocket so a connection can be proven from the UI.

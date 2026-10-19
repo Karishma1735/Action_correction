@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
+import TableSourceCard from './TableSourceCard.jsx';
 
 const EMBED_SCRIPT = 'https://embed.viasocket.com/prod-embedcomponent.js';
 
@@ -91,7 +92,7 @@ export default function IntegrationsPage() {
           <button className="btn sm" onClick={refreshConnections}>Refresh</button>
         </div>
         <div className="chips" style={{ marginBottom: 14 }}>
-          {[['slack', 'Slack'], ['gmail', 'Email (Gmail)']].map(([key, name]) => (
+          {[['slack', 'Slack'], ['gmail', 'Email (Gmail)'], ['table', 'viaSocket Table']].map(([key, name]) => (
             <span key={key} className={`badge ${connections ? (connections[key] ? 'ok' : 'bad') : ''}`}>
               {name}: {connections ? (connections[key] ? 'connected' : 'not connected') : 'unknown'}
             </span>
@@ -119,6 +120,8 @@ export default function IntegrationsPage() {
         </form>
         {testResult && <p className={testResult.ok ? 'summary' : 'error'} style={{ marginTop: 14, marginBottom: 0 }}>{testResult.text}</p>}
       </section>
+
+      <TableSourceCard />
 
       <div ref={box} className="card embed-box" style={{ height: 640 }} />
     </>

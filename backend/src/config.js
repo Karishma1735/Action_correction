@@ -24,6 +24,7 @@ export const config = {
     runUrl: process.env.VIASOCKET_RUN_URL || 'https://flow.sokt.io',
   },
   // Who writes the notification text: viaSocket's built-in AI (no model key needed), or the fixed template.
+  tableSyncMinutes: num(process.env.TABLE_SYNC_MINUTES, 5),
   messageAi: {
     enabled: (process.env.MESSAGE_AI || 'on') !== 'off',
     service: process.env.MESSAGE_AI_SERVICE || 'openai',
