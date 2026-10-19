@@ -65,6 +65,13 @@ test('edit and delete people and teams', async () => {
     assert.equal((await send('DELETE', `/people/${asha.id}`)).status, 409); // has an action
     assert.equal((await send('DELETE', `/teams/${team.id}`)).status, 409); // has an action
 
+    const created = await (await send('POST', '/actions', { title: 'P', team_id: team.id, assignee_id: asha.id, priority: 'high' })).json();
+    assert.equal(created.priority, 'high');
+    assert.equal((await send('POST', '/actions', { title: 'P', team_id: team.id, assignee_id: asha.id, priority: 'urgent' })).status, 400);
+    const upd = await (await send('PUT', `/actions/${created.id}`, { title: 'P2', description: 'd', team_id: team.id, assignee_id: asha.id, priority: '' })).json();
+    assert.deepEqual([upd.title, upd.description, upd.priority], ['P2', 'd', null]);
+    assert.equal((await send('DELETE', `/actions/${created.id}`)).status, 204);
+
     // Reassigning frees the person; deleting the action frees the team.
     const act = (await (await send('GET', '/actions')).json())[0];
     assert.equal((await send('PUT', `/actions/${act.id}`, { title: 'A', team_id: team.id, assignee_id: ravi.id })).status, 200);

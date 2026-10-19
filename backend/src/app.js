@@ -11,6 +11,8 @@ import { viasocketNotifier } from './notifier/viasocket.js';
 
 const STATUSES = ['open', 'in_progress', 'done'];
 const DECISIONS = ['rejected', 'improve'];
+const PRIORITIES = ['low', 'medium', 'high'];
+const priorityOf = (v) => (v === '' || v == null ? null : PRIORITIES.includes(v) ? v : undefined);
 
 function secretMatches(provided) {
   const a = Buffer.from(String(provided || ''));
@@ -104,10 +106,12 @@ export function createApp(db, escalation) {
   app.post('/api/actions', (req, res) => {
     const { title, description, team_id, assignee_id } = req.body;
     if (!title || !team_id || !assignee_id) return res.status(400).json({ error: 'title, team_id and assignee_id are required' });
+    const priority = priorityOf(req.body.priority);
+    if (priority === undefined) return res.status(400).json({ error: `priority must be one of ${PRIORITIES.join(', ')}` });
     try {
       const info = db
-        .prepare('INSERT INTO actions (title, description, team_id, assignee_id) VALUES (?, ?, ?, ?)')
-        .run(title, description ?? null, team_id, assignee_id);
+        .prepare('INSERT INTO actions (title, description, team_id, assignee_id, priority, priority_manual) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(title, description ?? null, team_id, assignee_id, priority, priority ? 1 : 0);
       res.status(201).json(db.prepare('SELECT * FROM actions WHERE id = ?').get(info.lastInsertRowid));
     } catch (err) {
       res.status(400).json({ error: err.message });
@@ -116,11 +120,13 @@ export function createApp(db, escalation) {
   app.put('/api/actions/:id', (req, res) => {
     const { title, description, team_id, assignee_id } = req.body;
     if (!title || !team_id || !assignee_id) return res.status(400).json({ error: 'title, team_id and assignee_id are required' });
+    const priority = priorityOf(req.body.priority);
+    if (priority === undefined) return res.status(400).json({ error: `priority must be one of ${PRIORITIES.join(', ')}` });
     if (!db.prepare('SELECT 1 FROM teams WHERE id = ?').get(team_id)) return res.status(400).json({ error: 'team not found' });
     if (!db.prepare('SELECT 1 FROM people WHERE id = ?').get(assignee_id)) return res.status(400).json({ error: 'person not found' });
     const before = db.prepare('SELECT * FROM actions WHERE id = ?').get(req.params.id);
     if (!before) return res.status(404).json({ error: 'not found' });
-    db.prepare("UPDATE actions SET title = ?, description = ?, team_id = ?, assignee_id = ?, updated_at = datetime('now') WHERE id = ?").run(title, description ?? null, team_id, assignee_id, before.id);
+    db.prepare("UPDATE actions SET title = ?, description = ?, team_id = ?, assignee_id = ?, priority = ?, priority_manual = ?, updated_at = datetime('now') WHERE id = ?").run(title, description || null, team_id, assignee_id, priority, priority ? (priority !== before.priority ? 1 : before.priority_manual) : 0, before.id);
     if (before.assignee_id !== assignee_id) {
       const name = db.prepare('SELECT name FROM people WHERE id = ?').get(assignee_id).name;
       db.prepare('INSERT INTO events (action_id, kind, detail) VALUES (?, ?, ?)').run(before.id, 'reassigned', `assignee -> ${name}`);

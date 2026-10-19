@@ -56,5 +56,9 @@ export function openDb(path = config.dbPath) {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+  // Added later: 1 when a person chose the priority, so the AI rating never overwrites it.
+  if (!db.prepare("SELECT 1 FROM pragma_table_info('actions') WHERE name = 'priority_manual'").get()) {
+    db.exec('ALTER TABLE actions ADD COLUMN priority_manual INTEGER NOT NULL DEFAULT 0');
+  }
   return db;
 }

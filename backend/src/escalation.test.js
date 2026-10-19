@@ -63,3 +63,21 @@ test('a person who is both assignee and lead gets one message, not two', async (
   await escalation.review(action, 'rejected', 'Missing tax field');
   assert.equal(kinds(db, action).filter((k) => k === 'sent:initial').length, 1);
 });
+
+test('a priority set by hand is kept; the AI only fills an empty one', async () => {
+  const { db, escalation, action } = setup();
+  db.prepare("UPDATE actions SET priority = 'low', priority_manual = 1 WHERE id = ?").run(action);
+  await escalation.review(action, 'rejected', 'URGENT security blocker');
+  assert.equal(db.prepare('SELECT priority FROM actions WHERE id = ?').get(action).priority, 'low');
+  const { db: db2, escalation: esc2, action: a2 } = setup();
+  await esc2.review(a2, 'rejected', 'URGENT security blocker');
+  assert.equal(db2.prepare('SELECT priority FROM actions WHERE id = ?').get(a2).priority, 'high');
+});
+
+test('an AI-rated priority is re-rated on the next review', async () => {
+  const { db, escalation, action } = setup();
+  await escalation.review(action, 'rejected', 'minor typo');
+  assert.equal(db.prepare('SELECT priority FROM actions WHERE id = ?').get(action).priority, 'medium');
+  await escalation.review(action, 'rejected', 'URGENT blocker');
+  assert.equal(db.prepare('SELECT priority FROM actions WHERE id = ?').get(action).priority, 'high');
+});

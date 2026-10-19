@@ -61,7 +61,7 @@ export function createEscalation(db) {
 
     cancelPending(actionId);
     db.prepare(
-      `UPDATE actions SET review = ?, feedback = ?, ai_summary = ?, ai_source = ?, priority = ?,
+      `UPDATE actions SET review = ?, feedback = ?, ai_summary = ?, ai_source = ?, priority = CASE WHEN priority_manual = 1 THEN priority ELSE ? END,
        status = 'open', updated_at = datetime('now') WHERE id = ?`,
     ).run(decision, feedback, analysis.summary, analysis.source, analysis.priority, actionId);
     logEvent(actionId, `review:${decision}`, feedback);

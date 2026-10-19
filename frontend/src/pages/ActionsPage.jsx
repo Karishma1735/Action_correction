@@ -5,30 +5,52 @@ const STATUS = { open: ['Open', 'info'], in_progress: ['In progress', 'warn'], d
 const REVIEW = { pending: ['Pending', ''], rejected: ['Rejected', 'bad'], improve: ['Needs improvement', 'warn'] };
 const PRIORITY = { high: 'bad', medium: 'warn', low: 'ok' };
 const label = (map, key) => map[key] || [key, ''];
-const EMPTY = { title: '', description: '', team_id: '', assignee_id: '' };
+const EMPTY = { title: '', description: '', team_id: '', assignee_id: '', priority: '' };
+const PRIORITY_OPTIONS = [['', 'Auto (AI rates it)'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']];
 
 function Badge({ tone = '', children }) {
   return <span className={`badge ${tone}`}>{children}</span>;
 }
 
 function ManageAction({ action, teams, people, onSave, onDelete }) {
-  const [team_id, setTeam] = useState(String(action.team_id));
-  const [assignee_id, setAssignee] = useState(String(action.assignee_id));
+  const initial = {
+    title: action.title,
+    description: action.description || '',
+    priority: action.priority || '',
+    team_id: String(action.team_id),
+    assignee_id: String(action.assignee_id),
+  };
+  const [f, setF] = useState(initial);
   const [confirming, setConfirming] = useState(false);
-  const changed = team_id !== String(action.team_id) || assignee_id !== String(action.assignee_id);
+  const set = (key) => (e) => setF({ ...f, [key]: e.target.value });
+  const changed = Object.keys(initial).some((k) => f[k] !== initial[k]);
   return (
     <>
-      <h4 className="section-title">Manage</h4>
+      <h4 className="section-title">Edit action</h4>
       <div className="grid">
+        <div className="field wide">
+          <label htmlFor="mtitle">Title</label>
+          <input id="mtitle" value={f.title} onChange={set('title')} />
+        </div>
+        <div className="field wide">
+          <label htmlFor="mdesc">Description</label>
+          <textarea id="mdesc" value={f.description} onChange={set('description')} />
+        </div>
         <div className="field">
-          <label htmlFor="mteam">Team</label>
-          <select id="mteam" value={team_id} onChange={(e) => setTeam(e.target.value)}>
-            {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          <label htmlFor="mpriority">Priority</label>
+          <select id="mpriority" value={f.priority} onChange={set('priority')}>
+            {PRIORITY_OPTIONS.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
           </select>
         </div>
         <div className="field">
+          <label htmlFor="mteam">Team</label>
+          <select id="mteam" value={f.team_id} onChange={set('team_id')}>
+            {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </div>
+        <div className="field wide">
           <label htmlFor="massignee">Assignee</label>
-          <select id="massignee" value={assignee_id} onChange={(e) => setAssignee(e.target.value)}>
+          <select id="massignee" value={f.assignee_id} onChange={set('assignee_id')}>
             {people.map((p) => <option key={p.id} value={p.id}>{p.name}{p.email ? ` (${p.email})` : ''}</option>)}
           </select>
         </div>
@@ -42,7 +64,13 @@ function ManageAction({ action, teams, people, onSave, onDelete }) {
         ) : (
           <button className="btn sm danger" onClick={() => setConfirming(true)}>Delete action</button>
         )}
-        <button className="btn sm primary" disabled={!changed} onClick={() => onSave({ team_id: Number(team_id), assignee_id: Number(assignee_id) })}>Save changes</button>
+        <button
+          className="btn sm primary"
+          disabled={!changed || !f.title.trim()}
+          onClick={() => onSave({ ...f, title: f.title.trim(), team_id: Number(f.team_id), assignee_id: Number(f.assignee_id) })}
+        >
+          Save changes
+        </button>
       </div>
     </>
   );
@@ -142,6 +170,12 @@ export default function ActionsPage() {
               {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
+          <div className="field">
+            <label htmlFor="priority">Priority</label>
+            <select id="priority" value={form.priority} onChange={set('priority')}>
+              {PRIORITY_OPTIONS.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
+            </select>
+          </div>
           <button className="btn primary" disabled={needsSetup}>Create action</button>
         </form>
       </section>
@@ -206,13 +240,12 @@ export default function ActionsPage() {
               <Badge tone={label(REVIEW, open.review)[1]}>{label(REVIEW, open.review)[0]}</Badge>
               {open.priority && <Badge tone={PRIORITY[open.priority] || ''}>{open.priority} priority</Badge>}
             </div>
-            {open.description && <p className="muted">{open.description}</p>}
             <ManageAction
-              key={`${open.id}-${open.team_id}-${open.assignee_id}`}
+              key={`${open.id}-${open.updated_at}`}
               action={open}
               teams={teams}
               people={people}
-              onSave={(change) => run(() => api.updateAction(open.id, { title: open.title, description: open.description, ...change }))}
+              onSave={(change) => run(() => api.updateAction(open.id, change))}
               onDelete={async () => {
                 const id = open.id;
                 setOpen(null);
