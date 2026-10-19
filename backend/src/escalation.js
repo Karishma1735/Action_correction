@@ -93,6 +93,15 @@ export function createEscalation(db) {
     return ctx.action;
   }
 
+  // Reviewer is satisfied: record it and stop any pending reminders. Nobody is notified.
+  function approve(actionId) {
+    if (!loadContext(actionId)) return null;
+    cancelPending(actionId);
+    db.prepare("UPDATE actions SET review = 'approved', updated_at = datetime('now') WHERE id = ?").run(actionId);
+    logEvent(actionId, 'review:approved');
+    return db.prepare('SELECT * FROM actions WHERE id = ?').get(actionId);
+  }
+
   function setStatus(actionId, status) {
     const result = db
       .prepare("UPDATE actions SET status = ?, updated_at = datetime('now') WHERE id = ?")
@@ -149,5 +158,5 @@ export function createEscalation(db) {
     return due.length;
   }
 
-  return { review, setStatus, tick, loadContext };
+  return { review, approve, setStatus, tick, loadContext };
 }

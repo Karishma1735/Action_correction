@@ -47,7 +47,7 @@ export const viasocketNotifier = {
             destination: { messageto: 'user', userId: [userId] },
             markdown_content: `*${subject}*\n${text}`,
             buttons: { '✅ Mark as done': doneUrl },
-            bot_details: { bot_name: 'Action Correction' },
+            bot_details: { bot_name: 'Plug Informatrix' },
             preview: { unfurl_links: false, unfurl_media: false },
           });
           return;
@@ -60,7 +60,7 @@ export const viasocketNotifier = {
         userId,
         content: `*${subject}*\n${text}`,
         isScheduledMessage: 'no', // always immediate
-        bot_details: { bot_name: 'Action Correction', customIcon: false },
+        bot_details: { bot_name: 'Plug Informatrix', customIcon: false },
       });
       return;
     }

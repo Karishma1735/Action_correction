@@ -115,3 +115,35 @@ test('done link marks the action done without a login, and only with a valid tok
     server.close();
   }
 });
+
+test('metrics count each assignee and team by current review state; approve stops reminders', async () => {
+  const db = openDb(':memory:');
+  const { createEscalation } = await import('./escalation.js');
+  const server = createApp(db, createEscalation(db)).listen(0);
+  const base = `http://127.0.0.1:${server.address().port}/api`;
+  try {
+    const up = await post(`${base}/auth/signup`, { email: 'dev@viasocket.com', password: 'longenough1' });
+    const h = { cookie: up.headers.get('set-cookie').split(';')[0] };
+    const send = (method, path, body) => fetch(`${base}${path}`, { method, headers: { 'content-type': 'application/json', ...h }, body: body && JSON.stringify(body) });
+    const [asha, ravi] = [await (await send('POST', '/people', { name: 'Asha' })).json(), await (await send('POST', '/people', { name: 'Ravi' })).json()];
+    const t1 = await (await send('POST', '/teams', { name: 'Ops' })).json();
+    const t2 = await (await send('POST', '/teams', { name: 'Empty' })).json();
+    const mk = async (assignee) => (await (await send('POST', '/actions', { title: 'x', team_id: t1.id, assignee_id: assignee.id })).json()).id;
+    const [a1, a2, a3, a4] = [await mk(asha), await mk(asha), await mk(asha), await mk(ravi)];
+    await send('POST', `/actions/${a1}/review`, { decision: 'rejected', feedback: 'bad' });
+    await send('POST', `/actions/${a2}/review`, { decision: 'improve', feedback: 'more' });
+    assert.equal((await send('POST', `/actions/${a3}/approve`)).status, 200);
+    await send('POST', `/actions/${a4}/status`, { status: 'done' });
+    assert.equal((await send('POST', '/actions/999/approve')).status, 404);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM jobs WHERE action_id = ? AND state = 'pending'").get(a3).n, 0);
+
+    const m = await (await send('GET', '/metrics')).json();
+    assert.deepEqual(m.totals, { total: 4, approved: 1, rejected: 1, improve: 1, pending: 1, done: 1 });
+    const a = m.assignees.find((p) => p.name === 'Asha');
+    assert.deepEqual([a.total, a.approved, a.rejected, a.improve, a.pending], [3, 1, 1, 1, 0]);
+    assert.equal(m.teams.find((t) => t.name === 'Empty').total, 0);
+    assert.equal((await fetch(`${base}/metrics`)).status, 401);
+  } finally {
+    server.close();
+  }
+});

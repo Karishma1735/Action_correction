@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import { api } from './api.js';
 import ActionsPage from './pages/ActionsPage.jsx';
 import SetupPage from './pages/SetupPage.jsx';
+import MatrixPage from './pages/MatrixPage.jsx';
 import IntegrationsPage from './pages/IntegrationsPage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 
 const PAGES = {
   actions: ['Actions', ActionsPage],
+  matrix: ['Matrix', MatrixPage],
   setup: ['People & teams', SetupPage],
   integrations: ['Integrations', IntegrationsPage],
 };
@@ -34,7 +36,7 @@ export default function App() {
     <>
       <header className="topbar">
         <div className="topbar-inner">
-          <div className="brand"><span className="brand-mark">✓</span><span>Action Correction</span></div>
+          <div className="brand"><span className="brand-mark">✓</span><span>Plug Informatrix</span></div>
           <nav className="tabs">
             {Object.entries(PAGES).map(([key, [label]]) => (
               <button key={key} className={`tab${key === page ? ' active' : ''}`} onClick={() => setPage(key)}>{label}</button>

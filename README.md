@@ -1,4 +1,4 @@
-# Action Correction
+# Plug Informatrix
 
 When an action is rejected or marked "improve", the assignee and team lead are notified
 (Slack or email). If it isn't Done after 2 hours they get a reminder; after 24 hours the

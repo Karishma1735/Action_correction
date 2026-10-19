@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 
 const STATUS = { open: ['Open', 'info'], in_progress: ['In progress', 'warn'], done: ['Done', 'ok'] };
-const REVIEW = { pending: ['Pending', ''], rejected: ['Rejected', 'bad'], improve: ['Needs improvement', 'warn'] };
+const REVIEW = { pending: ['Pending', ''], approved: ['Approved', 'ok'], rejected: ['Rejected', 'bad'], improve: ['Needs improvement', 'warn'] };
 const PRIORITY = { high: 'bad', medium: 'warn', low: 'ok' };
 const label = (map, key) => map[key] || [key, ''];
 const EMPTY = { title: '', description: '', team_id: '', assignee_id: '', priority: '' };
@@ -213,6 +213,7 @@ export default function ActionsPage() {
                       <td>{a.priority ? <Badge tone={PRIORITY[a.priority] || ''}>{a.priority}</Badge> : <span className="muted">–</span>}</td>
                       <td>
                         <div className="btn-row">
+                          <button className="btn sm success" disabled={a.review === 'approved'} onClick={() => run(() => api.approve(a.id))}>Approve</button>
                           <button className="btn sm danger" onClick={() => setDialog({ action: a, decision: 'rejected' })}>Reject</button>
                           <button className="btn sm" onClick={() => setDialog({ action: a, decision: 'improve' })}>Improve</button>
                           <button className="btn sm success" disabled={a.status === 'done'} onClick={() => run(() => api.setStatus(a.id, 'done'))}>Done</button>

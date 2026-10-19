@@ -17,7 +17,7 @@ const priorityOf = (v) => (v === '' || v == null ? null : PRIORITIES.includes(v)
 
 
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const donePage = (body) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Action Correction</title>
+const donePage = (body) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Plug Informatrix</title>
 <style>body{font:16px/1.5 system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;background:#f5f6fa;color:#171a22}main{background:#fff;border:1px solid #e3e6ee;border-radius:12px;padding:32px;max-width:420px;text-align:center}button{font:inherit;font-weight:600;background:#4f46e5;color:#fff;border:0;border-radius:8px;padding:10px 18px;cursor:pointer}.ok{color:#067647}.bad{color:#b42318}</style></head><body><main>${body}</main></body></html>`;
 
 function secretMatches(provided) {
@@ -202,6 +202,42 @@ go();
     res.json(action);
   });
 
+  app.post('/api/actions/:id/approve', (req, res) => {
+    const action = escalation.approve(Number(req.params.id));
+    if (!action) return res.status(404).json({ error: 'not found' });
+    res.json(action);
+  });
+
+  // Counts per assignee and per team, by each action's current review state.
+  app.get('/api/metrics', (_req, res) => {
+    const counts = (idCol, table) =>
+      db
+        .prepare(
+          `SELECT t.id, t.name,
+             COUNT(a.id) AS total,
+             COALESCE(SUM(a.review = 'approved'), 0) AS approved,
+             COALESCE(SUM(a.review = 'rejected'), 0) AS rejected,
+             COALESCE(SUM(a.review = 'improve'), 0) AS improve,
+             COALESCE(SUM(a.review = 'pending'), 0) AS pending,
+             COALESCE(SUM(a.status = 'done'), 0) AS done
+           FROM ${table} t LEFT JOIN actions a ON a.${idCol} = t.id
+           GROUP BY t.id ORDER BY total DESC, t.name`,
+        )
+        .all();
+    const totals = db
+      .prepare(
+        `SELECT COUNT(*) AS total,
+           COALESCE(SUM(review = 'approved'), 0) AS approved,
+           COALESCE(SUM(review = 'rejected'), 0) AS rejected,
+           COALESCE(SUM(review = 'improve'), 0) AS improve,
+           COALESCE(SUM(review = 'pending'), 0) AS pending,
+           COALESCE(SUM(status = 'done'), 0) AS done
+         FROM actions`,
+      )
+      .get();
+    res.json({ totals, assignees: counts('assignee_id', 'people'), teams: counts('team_id', 'teams') });
+  });
+
   // Used by the UI and by Slack/viaSocket callbacks. Callbacks must send X-Callback-Secret.
   app.post('/api/actions/:id/status', (req, res) => {
     const fromCallback = req.get('x-callback-secret') !== undefined;
@@ -250,7 +286,7 @@ go();
       await viasocketNotifier.send({
         channel,
         to: person,
-        subject: 'Test message from Action Correction',
+        subject: 'Test message from Plug Informatrix',
         text: 'If you can read this, reminders and escalations will reach you.',
         rememberSlackId: (id) => db.prepare('UPDATE people SET slack_id = ? WHERE id = ?').run(id, person.id),
       });

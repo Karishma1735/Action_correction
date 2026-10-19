@@ -26,7 +26,7 @@ export default function LoginPage({ onSignedIn }) {
   return (
     <div className="auth-wrap">
       <div className="card auth-card">
-        <div className="brand"><span className="brand-mark">✓</span><span>Action Correction</span></div>
+        <div className="brand"><span className="brand-mark">✓</span><span>Plug Informatrix</span></div>
         <h2>{signup ? 'Create your account' : 'Welcome back'}</h2>
         <p className="sub">{signup ? 'Use your @viasocket.com email address.' : 'Sign in with your @viasocket.com account.'}</p>
         <form onSubmit={submit}>
