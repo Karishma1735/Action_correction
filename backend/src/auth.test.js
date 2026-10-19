@@ -41,3 +41,34 @@ test('email signup limited to the allowed domain, and login gates /api', async (
     server.close();
   }
 });
+
+test('edit and delete people and teams', async () => {
+  const server = createApp(openDb(':memory:'), {}).listen(0);
+  const base = `http://127.0.0.1:${server.address().port}/api`;
+  try {
+    const up = await post(`${base}/auth/signup`, { email: 'dev@viasocket.com', password: 'longenough1' });
+    const h = { cookie: up.headers.get('set-cookie').split(';')[0] };
+    const send = (method, path, body) => fetch(`${base}${path}`, { method, headers: { 'content-type': 'application/json', ...h }, body: body && JSON.stringify(body) });
+    const asha = await (await send('POST', '/people', { name: 'Asha', email: 'a@viasocket.com' })).json();
+    const ravi = await (await send('POST', '/people', { name: 'Ravi' })).json();
+    const team = await (await send('POST', '/teams', { name: 'Support', lead_id: ravi.id, manager_id: ravi.id })).json();
+
+    const edited = await (await send('PUT', `/people/${asha.id}`, { name: 'Asha Rao', email: 'asha@viasocket.com', slack_id: 'U0ASHA123' })).json();
+    assert.equal(edited.name, 'Asha Rao');
+    assert.equal((await send('PUT', `/people/${asha.id}`, { name: '' })).status, 400);
+    assert.equal((await send('PUT', '/people/999', { name: 'x' })).status, 404);
+    assert.equal((await send('PUT', `/teams/${team.id}`, { name: 'Support', channel: 'sms' })).status, 400);
+    const t2 = await (await send('PUT', `/teams/${team.id}`, { name: 'Support EU', lead_id: asha.id, manager_id: null, channel: 'email' })).json();
+    assert.deepEqual([t2.name, t2.lead_id, t2.manager_id, t2.channel], ['Support EU', asha.id, null, 'email']);
+
+    await send('POST', '/actions', { title: 'A', team_id: team.id, assignee_id: asha.id });
+    assert.equal((await send('DELETE', `/people/${asha.id}`)).status, 409); // has an action
+    assert.equal((await send('DELETE', `/teams/${team.id}`)).status, 409); // has an action
+
+    assert.equal((await send('DELETE', `/people/${ravi.id}`)).status, 204);
+    assert.equal((await (await send('GET', '/people')).json()).length, 1);
+    assert.equal((await send('DELETE', '/people/999')).status, 404);
+  } finally {
+    server.close();
+  }
+});

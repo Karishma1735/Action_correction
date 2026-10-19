@@ -4,7 +4,7 @@ async function request(path, options = {}) {
     ...options,
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
-  const data = await res.json().catch(() => ({}));
+  const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
   if (res.status === 401 && !path.startsWith('/auth/')) window.dispatchEvent(new Event('ac-signed-out'));
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
@@ -17,7 +17,11 @@ export const api = {
   logout: () => request('/auth/logout', { method: 'POST' }),
   people: () => request('/people'),
   addPerson: (body) => request('/people', { method: 'POST', body }),
+  updatePerson: (id, body) => request(`/people/${id}`, { method: 'PUT', body }),
+  deletePerson: (id) => request(`/people/${id}`, { method: 'DELETE' }),
   teams: () => request('/teams'),
+  updateTeam: (id, body) => request(`/teams/${id}`, { method: 'PUT', body }),
+  deleteTeam: (id) => request(`/teams/${id}`, { method: 'DELETE' }),
   addTeam: (body) => request('/teams', { method: 'POST', body }),
   actions: () => request('/actions'),
   action: (id) => request(`/actions/${id}`),

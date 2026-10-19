@@ -42,6 +42,26 @@ export function createApp(db, escalation) {
     res.status(201).json(db.prepare('SELECT * FROM people WHERE id = ?').get(info.lastInsertRowid));
   });
 
+  app.put('/api/people/:id', (req, res) => {
+    const { name, email, slack_id } = req.body;
+    if (!name) return res.status(400).json({ error: 'name is required' });
+    const info = db.prepare('UPDATE people SET name = ?, email = ?, slack_id = ? WHERE id = ?').run(name, email || null, slack_id || null, req.params.id);
+    if (!info.changes) return res.status(404).json({ error: 'not found' });
+    res.json(db.prepare('SELECT * FROM people WHERE id = ?').get(req.params.id));
+  });
+  app.delete('/api/people/:id', (req, res) => {
+    const { id } = req.params;
+    if (!db.prepare('SELECT 1 FROM people WHERE id = ?').get(id)) return res.status(404).json({ error: 'not found' });
+    const { n } = db.prepare('SELECT COUNT(*) AS n FROM actions WHERE assignee_id = ?').get(id);
+    if (n) return res.status(409).json({ error: `Can't delete: assigned to ${n} action${n > 1 ? 's' : ''}. Reassign or finish them first.` });
+    db.transaction(() => {
+      db.prepare('UPDATE teams SET lead_id = NULL WHERE lead_id = ?').run(id);
+      db.prepare('UPDATE teams SET manager_id = NULL WHERE manager_id = ?').run(id);
+      db.prepare('DELETE FROM people WHERE id = ?').run(id);
+    })();
+    res.status(204).end();
+  });
+
   app.get('/api/teams', (_req, res) => res.json(db.prepare('SELECT * FROM teams ORDER BY name').all()));
   app.post('/api/teams', (req, res) => {
     const { name, lead_id, manager_id, channel = 'slack' } = req.body;
@@ -51,6 +71,23 @@ export function createApp(db, escalation) {
       .prepare('INSERT INTO teams (name, lead_id, manager_id, channel) VALUES (?, ?, ?, ?)')
       .run(name, lead_id ?? null, manager_id ?? null, channel);
     res.status(201).json(db.prepare('SELECT * FROM teams WHERE id = ?').get(info.lastInsertRowid));
+  });
+
+  app.put('/api/teams/:id', (req, res) => {
+    const { name, lead_id, manager_id, channel = 'slack' } = req.body;
+    if (!name) return res.status(400).json({ error: 'name is required' });
+    if (!['slack', 'email'].includes(channel)) return res.status(400).json({ error: 'channel must be slack or email' });
+    const info = db.prepare('UPDATE teams SET name = ?, lead_id = ?, manager_id = ?, channel = ? WHERE id = ?').run(name, lead_id ?? null, manager_id ?? null, channel, req.params.id);
+    if (!info.changes) return res.status(404).json({ error: 'not found' });
+    res.json(db.prepare('SELECT * FROM teams WHERE id = ?').get(req.params.id));
+  });
+  app.delete('/api/teams/:id', (req, res) => {
+    const { id } = req.params;
+    if (!db.prepare('SELECT 1 FROM teams WHERE id = ?').get(id)) return res.status(404).json({ error: 'not found' });
+    const { n } = db.prepare('SELECT COUNT(*) AS n FROM actions WHERE team_id = ?').get(id);
+    if (n) return res.status(409).json({ error: `Can't delete: ${n} action${n > 1 ? 's' : ''} belong to this team.` });
+    db.prepare('DELETE FROM teams WHERE id = ?').run(id);
+    res.status(204).end();
   });
 
   app.get('/api/actions', (_req, res) =>
