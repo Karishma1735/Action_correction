@@ -1,4 +1,7 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import cors from 'cors';
 import express from 'express';
 import jwt from 'jsonwebtoken';
@@ -16,6 +19,7 @@ function secretMatches(provided) {
 
 export function createApp(db, escalation) {
   const app = express();
+  app.set('trust proxy', 1);
   app.use(cors({ origin: config.frontendOrigin }));
   app.use(express.json());
 
@@ -116,6 +120,13 @@ export function createApp(db, escalation) {
     const token = jwt.sign({ org_id: orgId, project_id: projectId, unique_identifier: EMBED_USER }, embedSecret, { algorithm: 'HS256' });
     res.json({ token });
   });
+
+  // One-service deploy: serve the built frontend (cd frontend && npm run build) from the backend.
+  const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../frontend/dist');
+  if (fs.existsSync(dist)) {
+    app.use(express.static(dist));
+    app.get(/^\/(?!api\/).*/, (_req, res) => res.sendFile(path.join(dist, 'index.html')));
+  }
 
   return app;
 }
