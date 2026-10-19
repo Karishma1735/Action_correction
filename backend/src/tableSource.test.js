@@ -6,7 +6,7 @@ process.env.VIASOCKET_PROJECT_ID = 'projTest';
 process.env.VIASOCKET_EMBED_SECRET = 'embed-secret';
 
 const { openDb } = await import('./db.js');
-const { createTableSource, dayOf } = await import('./tableSource.js');
+const { createTableSource, dayOf, targetDay } = await import('./tableSource.js');
 
 // Fake viaSocket with one table. `rows` is what Get Table Rows answers; `calls` records its requests.
 function fakeTable(rows, { connected = true } = {}) {
@@ -120,4 +120,31 @@ test('dayOf reads dates in the chosen timezone', () => {
   assert.equal(dayOf('2026-10-19T22:30:00Z', 'UTC'), '2026-10-19');
   assert.equal(dayOf('2026-10-19', 'Asia/Kolkata'), '2026-10-19');
   assert.equal(dayOf('nonsense', 'UTC'), null);
+});
+
+test('targetDay: the previous working day, skipping the weekly off days', () => {
+  const at = (iso, opts) => targetDay(new Date(iso), { timezone: 'Asia/Kolkata', ...opts });
+  const sundayOff = { days_back: 1, off_days: [0] };
+  assert.equal(at('2026-10-19T10:00:00Z', sundayOff), '2026-10-17'); // Monday 19 -> Saturday 17
+  assert.equal(at('2026-10-20T10:00:00Z', sundayOff), '2026-10-19'); // Tuesday 20 -> Monday 19
+  assert.equal(at('2026-10-18T10:00:00Z', sundayOff), '2026-10-17'); // Sunday 18 -> Saturday 17
+  assert.equal(at('2026-10-19T10:00:00Z', { days_back: 1, off_days: [0, 6] }), '2026-10-16'); // Saturday off too -> Friday
+  assert.equal(at('2026-10-19T10:00:00Z', { days_back: 0, off_days: [0] }), '2026-10-19'); // 0 = today
+  assert.equal(at('2026-10-19T20:00:00Z', { days_back: 0 }), '2026-10-20'); // 01:30 IST is already the 20th
+});
+
+test('the previous-working-day filter imports only that day and reports the numbers', async () => {
+  const rows = [row('a', { day: '2026-10-17T18:20:00Z' }), row('b', { day: '2026-10-18T05:00:00Z' }), row('c', { day: '2026-10-16T18:20:00Z' })]; // IST: 17th 23:50, 18th, 16th 23:50
+  fakeTable(rows);
+  const { db, source } = setup();
+  source.saveConfig({ ...source.getConfig(), day_filter: { column: 'day', timezone: 'Asia/Kolkata', days_back: 1, off_days: [0] } });
+  const real = globalThis.Date;
+  globalThis.Date = class extends real { constructor(...a) { super(...(a.length ? a : ['2026-10-19T10:00:00Z'])); } static now() { return new real('2026-10-19T10:00:00Z').getTime(); } };
+  try {
+    const r = await source.sync();
+    assert.deepEqual([r.target_day, r.rows, r.matched, r.created], ['2026-10-17', 3, 1, 1]);
+    assert.equal(db.prepare('SELECT source_row_id FROM actions').get().source_row_id, 'a');
+  } finally {
+    globalThis.Date = real;
+  }
 });

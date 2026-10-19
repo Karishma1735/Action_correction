@@ -8,7 +8,8 @@ const MAPPING = [
   ['description', 'Description', false],
   ['priority', 'Priority (low, medium, high)', false],
 ];
-const EMPTY = { table: '', table_name: '', columns: {}, default_team_id: '', create_missing: false, day_column: '', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone };
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const EMPTY = { table: '', table_name: '', columns: {}, default_team_id: '', create_missing: false, day_column: '', days_back: 1, off_days: [0], timezone: Intl.DateTimeFormat().resolvedOptions().timeZone };
 
 export const when = (iso) => (iso ? new Date(iso).toLocaleString() : 'never');
 
@@ -18,7 +19,7 @@ export function SyncSummary({ sync }) {
     <>
       <p style={{ margin: '0 0 6px' }} className={sync.ok ? '' : 'error'}>
         {sync.ok
-          ? `Last synced ${when(sync.at)}: ${sync.created} new, ${sync.updated} updated, ${sync.skipped.length} skipped (${sync.rows} rows in the table).`
+          ? `Last synced ${when(sync.at)}: ${sync.created} new, ${sync.updated} updated, ${sync.skipped.length} skipped. ${sync.target_day ? `${sync.matched} of ${sync.rows} rows are dated ${sync.target_day}.` : `${sync.rows} rows in the table.`}`
           : `Last sync failed ${when(sync.at)}: ${sync.error}`}
       </p>
       {sync.skipped.length > 0 && (
@@ -47,7 +48,7 @@ export default function TableSourceCard() {
 
   async function startEditing() {
     const c = state?.config;
-    setForm(c ? { table: c.table, table_name: c.table_name || '', columns: c.columns, default_team_id: c.default_team_id ? String(c.default_team_id) : '', create_missing: c.create_missing, day_column: c.day_filter?.column || '', timezone: c.day_filter?.timezone || EMPTY.timezone } : EMPTY);
+    setForm(c ? { table: c.table, table_name: c.table_name || '', columns: c.columns, default_team_id: c.default_team_id ? String(c.default_team_id) : '', create_missing: c.create_missing, day_column: c.day_filter?.column || '', days_back: c.day_filter?.days_back ?? 0, off_days: c.day_filter?.off_days ?? [], timezone: c.day_filter?.timezone || EMPTY.timezone } : EMPTY);
     setEditing(true);
     setError('');
     try { setTables(await api.tableSourceTables()); } catch (e) { setTables([]); setError(e.message); }
@@ -73,7 +74,7 @@ export default function TableSourceCard() {
         columns: form.columns,
         default_team_id: form.default_team_id ? Number(form.default_team_id) : null,
         create_missing: form.create_missing,
-        day_filter: form.day_column ? { column: form.day_column, timezone: form.timezone } : null,
+        day_filter: form.day_column ? { column: form.day_column, timezone: form.timezone, days_back: Number(form.days_back), off_days: form.off_days } : null,
       });
       setState(await api.syncTableSource());
       setEditing(false);
@@ -114,7 +115,9 @@ export default function TableSourceCard() {
         <>
           <p style={{ margin: '0 0 10px' }}>
             Importing from <strong>{cfg.table_name || cfg.table}</strong> every {state.everyMinutes} minutes.
-            {cfg.day_filter && <> Only rows whose date is today ({cfg.day_filter.timezone}).</>}
+            {cfg.day_filter && (cfg.day_filter.days_back
+              ? <> Each day it takes the previous working day's rows ({cfg.day_filter.timezone}{cfg.day_filter.off_days.length ? `, off: ${cfg.day_filter.off_days.map((d) => DAYS[d]).join(', ')}` : ''}).</>
+              : <> Only rows dated today ({cfg.day_filter.timezone}).</>)}
           </p>
           <SyncSummary sync={state.lastSync} />
           <div className="btn-row" style={{ justifyContent: 'flex-start', marginTop: 12 }}>
@@ -153,7 +156,7 @@ export default function TableSourceCard() {
                   </select>
                 </div>
                 <div className="field">
-                  <label htmlFor="day">Only today's rows, by (optional)</label>
+                  <label htmlFor="day">Only import rows by date, using (optional)</label>
                   <select id="day" value={form.day_column} onChange={(e) => setForm({ ...form, day_column: e.target.value })}>
                     <option value="">Import all rows</option>
                     <option value="createdat">Created at</option>
@@ -161,10 +164,33 @@ export default function TableSourceCard() {
                   </select>
                 </div>
                 {form.day_column && (
-                  <div className="field">
-                    <label htmlFor="tz">Timezone for “today”</label>
-                    <input id="tz" value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })} placeholder="e.g. Asia/Kolkata" />
-                  </div>
+                  <>
+                    <div className="field">
+                      <label htmlFor="back">Which day's rows</label>
+                      <select id="back" value={form.days_back} onChange={(e) => setForm({ ...form, days_back: Number(e.target.value) })}>
+                        <option value={1}>The previous working day</option>
+                        <option value={0}>Today</option>
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label htmlFor="tz">Timezone</label>
+                      <input id="tz" value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })} placeholder="e.g. Asia/Kolkata" />
+                    </div>
+                    {form.days_back > 0 && (
+                      <div className="field wide">
+                        <span className="label">Days off (skipped when looking back)</span>
+                        <div className="btn-row" style={{ justifyContent: 'flex-start', gap: 14 }}>
+                          {DAYS.map((name, i) => (
+                            <label key={name} style={{ fontWeight: 500 }}>
+                              <input type="checkbox" style={{ width: 'auto', marginRight: 6 }} checked={form.off_days.includes(i)}
+                                onChange={(e) => setForm({ ...form, off_days: e.target.checked ? [...form.off_days, i] : form.off_days.filter((d) => d !== i) })} />{name}
+                            </label>
+                          ))}
+                        </div>
+                        <span className="muted">Example with Sunday off: on Monday it imports Saturday's rows; on Tuesday, Monday's.</span>
+                      </div>
+                    )}
+                  </>
                 )}
                 <div className="field wide">
                   <label><input type="checkbox" style={{ width: 'auto', marginRight: 8 }} checked={form.create_missing} onChange={(e) => setForm({ ...form, create_missing: e.target.checked })} />Create people and teams that a row names but the app doesn't have yet</label>

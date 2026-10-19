@@ -33,6 +33,25 @@ export function dayOf(value, timeZone) {
   return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
 }
 
+const weekday = (day) => {
+  const [y, m, d] = day.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay(); // 0 = Sunday
+};
+const shiftDay = (day, delta) => {
+  const [y, m, d] = day.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + delta)).toISOString().slice(0, 10);
+};
+
+// The calendar day whose rows are imported today. daysBack 0 is today itself; 1 is the previous
+// working day: yesterday, unless that is an off day, then the day before it, and so on.
+export function targetDay(now, { timezone, days_back: daysBack = 0, off_days: offDays = [] }) {
+  let day = dayOf(now, timezone);
+  for (let i = 0; i < daysBack; i += 1) {
+    do day = shiftDay(day, -1); while (offDays.includes(weekday(day)) && offDays.length < 7);
+  }
+  return day;
+}
+
 export function createTableSource(db) {
   const getSetting = (key) => {
     const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
@@ -51,14 +70,20 @@ export function createTableSource(db) {
     if (!columns.assignee) throw new Error('Choose the column that holds the assignee');
     if (!columns.team && !c.default_team_id) throw new Error('Choose a team column, or a default team');
     if (c.default_team_id && !db.prepare('SELECT 1 FROM teams WHERE id = ?').get(c.default_team_id)) throw new Error('Default team not found');
-    if (c.day_filter?.column && !c.day_filter.timezone) throw new Error('Choose a timezone for the day filter');
+    const df = c.day_filter;
+    if (df?.column && !df.timezone) throw new Error('Choose a timezone for the day filter');
+    if (df?.column && (!Number.isInteger(df.days_back ?? 0) || df.days_back < 0 || df.days_back > 7)) throw new Error('days_back must be 0 to 7');
+    if (df?.column && df.off_days && !(Array.isArray(df.off_days) && df.off_days.every((n) => Number.isInteger(n) && n >= 0 && n <= 6))) throw new Error('off_days must be weekday numbers 0 to 6');
+    if (df?.column && (df.off_days ?? []).length >= 7) throw new Error('Not every day of the week can be an off day');
     return {
       table: String(c.table),
       table_name: c.table_name ? String(c.table_name) : null,
       columns: Object.fromEntries(FIELDS.map((f) => [f, columns[f] || null])),
       default_team_id: c.default_team_id ? Number(c.default_team_id) : null,
       create_missing: Boolean(c.create_missing),
-      day_filter: c.day_filter?.column ? { column: String(c.day_filter.column), timezone: String(c.day_filter.timezone) } : null,
+      day_filter: df?.column
+        ? { column: String(df.column), timezone: String(df.timezone), days_back: df.days_back ?? 0, off_days: [...new Set(df.off_days ?? [])].sort() }
+        : null,
     };
   }
 
@@ -117,14 +142,15 @@ export function createTableSource(db) {
   async function sync() {
     const cfg = getConfig();
     if (!cfg) throw new Error('No table is selected');
-    const result = { at: new Date().toISOString(), ok: true, error: null, rows: 0, created: 0, updated: 0, skipped: [] };
+    const result = { at: new Date().toISOString(), ok: true, error: null, rows: 0, matched: 0, target_day: null, created: 0, updated: 0, skipped: [] };
     try {
       let rows = await fetchRows(cfg.table);
       result.rows = rows.length;
       if (cfg.day_filter) {
-        const today = dayOf(new Date(), cfg.day_filter.timezone);
-        rows = rows.filter((r) => dayOf(r[cfg.day_filter.column], cfg.day_filter.timezone) === today);
+        result.target_day = targetDay(new Date(), cfg.day_filter);
+        rows = rows.filter((r) => dayOf(r[cfg.day_filter.column], cfg.day_filter.timezone) === result.target_day);
       }
+      result.matched = rows.length;
       const col = cfg.columns;
       for (const row of rows) {
         const rowId = text(row.rowid);
