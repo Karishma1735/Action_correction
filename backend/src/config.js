@@ -22,5 +22,10 @@ export const config = {
     apiKey: process.env.GEMINI_API_KEY,
     model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
   },
+  auth: {
+    password: process.env.APP_PASSWORD,
+    sessionSecret: process.env.SESSION_SECRET,
+    secureCookie: process.env.NODE_ENV === 'production',
+  },
   callbackSecret: process.env.CALLBACK_SECRET || 'change-me',
 };

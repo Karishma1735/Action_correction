@@ -3,6 +3,7 @@ import cors from 'cors';
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from './config.js';
+import { createAuth } from './auth.js';
 
 const STATUSES = ['open', 'in_progress', 'done'];
 const DECISIONS = ['rejected', 'improve'];
@@ -19,6 +20,13 @@ export function createApp(db, escalation) {
   app.use(express.json());
 
   app.get('/api/health', (_req, res) => res.json({ ok: true, notifier: config.notifier }));
+
+  const auth = createAuth();
+  app.post('/api/auth/login', auth.login);
+  app.post('/api/auth/logout', auth.logout);
+  app.get('/api/auth/me', auth.me);
+  // Callbacks from Slack/viaSocket carry X-Callback-Secret, which the status route checks itself.
+  app.use('/api', (req, res, next) => (req.get('x-callback-secret') !== undefined ? next() : auth.require(req, res, next)));
 
   app.get('/api/people', (_req, res) => res.json(db.prepare('SELECT * FROM people ORDER BY name').all()));
   app.post('/api/people', (req, res) => {

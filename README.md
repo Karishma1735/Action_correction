@@ -18,4 +18,6 @@ Timings come from `REMIND_AFTER_MINUTES` / `ESCALATE_AFTER_MINUTES`. `NOTIFIER=l
 messages to the console (dev only); `NOTIFIER=viasocket` sends through viaSocket Embed, which
 is **not wired yet** (see `backend/src/notifier/viasocket.js`).
 
+Login: set `APP_PASSWORD` and `SESSION_SECRET` in `backend/.env`; every `/api` route except health and login needs the session cookie (12h). Without them the API answers 503.
+
 Tests: `cd backend && npm test`
