@@ -44,7 +44,7 @@ export default function SetupPage() {
           <form onSubmit={submit(api.addPerson, person, () => setPerson(EMPTY_PERSON))} className="grid" style={{ marginBottom: 12 }}>
             <div className="field wide"><label htmlFor="pname">Name</label><input id="pname" required value={person.name} onChange={setP('name')} /></div>
             <div className="field"><label htmlFor="pemail">Email</label><input id="pemail" type="email" value={person.email} onChange={setP('email')} /></div>
-            <div className="field"><label htmlFor="pslack">Slack member ID</label><input id="pslack" placeholder="U01ABC23" value={person.slack_id} onChange={setP('slack_id')} /></div>
+            <div className="field"><label htmlFor="pslack">Slack member ID (optional)</label><input id="pslack" placeholder="Found from email if empty" value={person.slack_id} onChange={setP('slack_id')} /></div>
             <button className="btn primary">Add person</button>
           </form>
           {people.length === 0 ? <div className="empty"><strong>No people yet</strong>Add the first one above.</div> : people.map((p) => (

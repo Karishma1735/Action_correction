@@ -25,5 +25,7 @@ export const api = {
   review: (id, body) => request(`/actions/${id}/review`, { method: 'POST', body }),
   setStatus: (id, status) => request(`/actions/${id}/status`, { method: 'POST', body: { status } }),
   integrations: () => request('/integrations/status'),
+  connections: () => request('/integrations/connections'),
+  testMessage: (body) => request('/integrations/test', { method: 'POST', body }),
   viasocketToken: () => request('/viasocket/token'),
 };

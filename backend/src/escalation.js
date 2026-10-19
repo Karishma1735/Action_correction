@@ -27,7 +27,13 @@ export function createEscalation(db) {
     const notifier = getNotifier();
     for (const to of recipients.filter(Boolean)) {
       try {
-        await notifier.send({ channel: ctx.team.channel, to, subject, text });
+        await notifier.send({
+          channel: ctx.team.channel,
+          to,
+          subject,
+          text,
+          rememberSlackId: (id) => db.prepare('UPDATE people SET slack_id = ? WHERE id = ?').run(id, to.id),
+        });
         logEvent(ctx.action.id, `sent:${kind}`, `${ctx.team.channel} -> ${to.name}`);
       } catch (err) {
         logEvent(ctx.action.id, `send_failed:${kind}`, `${to.name}: ${err.message}`);

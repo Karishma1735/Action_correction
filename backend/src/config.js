@@ -18,6 +18,8 @@ export const config = {
     orgId: process.env.VIASOCKET_ORG_ID,
     projectId: process.env.VIASOCKET_PROJECT_ID,
     embedSecret: process.env.VIASOCKET_EMBED_SECRET,
+    apiUrl: process.env.VIASOCKET_API_URL || 'https://flow-api.viasocket.com',
+    runUrl: process.env.VIASOCKET_RUN_URL || 'https://flow.sokt.io',
   },
   gemini: {
     apiKey: process.env.GEMINI_API_KEY,

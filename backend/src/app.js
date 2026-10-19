@@ -4,9 +4,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import cors from 'cors';
 import express from 'express';
-import jwt from 'jsonwebtoken';
 import { config } from './config.js';
 import { createAuth } from './auth.js';
+import { embedToken, findAuthId, SERVICES } from './viasocket/client.js';
+import { viasocketNotifier } from './notifier/viasocket.js';
 
 const STATUSES = ['open', 'in_progress', 'done'];
 const DECISIONS = ['rejected', 'improve'];
@@ -112,14 +113,42 @@ export function createApp(db, escalation) {
     }),
   );
 
-  // The app has no login, so the whole workspace is one viaSocket user. Never change this id:
-  // every connection and flow is isolated by it.
-  const EMBED_USER = 'action-correction-workspace';
   app.get('/api/viasocket/token', (_req, res) => {
-    const { orgId, projectId, embedSecret } = config.viasocket;
-    if (!orgId || !projectId || !embedSecret) return res.status(503).json({ error: 'viaSocket is not configured: set VIASOCKET_ORG_ID, VIASOCKET_PROJECT_ID and VIASOCKET_EMBED_SECRET' });
-    const token = jwt.sign({ org_id: orgId, project_id: projectId, unique_identifier: EMBED_USER }, embedSecret, { algorithm: 'HS256' });
-    res.json({ token });
+    try {
+      res.json({ token: embedToken() });
+    } catch (err) {
+      res.status(503).json({ error: err.message });
+    }
+  });
+
+  // Which of the apps used for delivery are connected right now (asked of viaSocket, not remembered).
+  app.get('/api/integrations/connections', async (_req, res) => {
+    try {
+      const entries = await Promise.all(Object.entries(SERVICES).map(async ([name, id]) => [name, Boolean(await findAuthId(id))]));
+      res.json(Object.fromEntries(entries));
+    } catch (err) {
+      res.status(502).json({ error: err.message });
+    }
+  });
+
+  // Sends one real message through viaSocket so a connection can be proven from the UI.
+  app.post('/api/integrations/test', async (req, res) => {
+    const { person_id, channel } = req.body;
+    if (!['slack', 'email'].includes(channel)) return res.status(400).json({ error: 'channel must be slack or email' });
+    const person = db.prepare('SELECT * FROM people WHERE id = ?').get(person_id);
+    if (!person) return res.status(404).json({ error: 'person not found' });
+    try {
+      await viasocketNotifier.send({
+        channel,
+        to: person,
+        subject: 'Test message from Action Correction',
+        text: 'If you can read this, reminders and escalations will reach you.',
+        rememberSlackId: (id) => db.prepare('UPDATE people SET slack_id = ? WHERE id = ?').run(id, person.id),
+      });
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(502).json({ error: err.message });
+    }
   });
 
   // One-service deploy: serve the built frontend (cd frontend && npm run build) from the backend.
